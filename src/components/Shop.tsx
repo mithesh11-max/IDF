@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { CATALOG, TAG_LABELS, type Tag } from '../data/catalog';
+import { TAG_LABELS, type Tag } from '../data/catalog';
+import { useCatalog } from '../context/CatalogContext';
 import { ORDER, inr } from '../lib/constants';
 import ProductCard from './ProductCard';
 import Reveal from './Reveal';
@@ -18,11 +19,12 @@ const FILTERS: { id: Filter; label: string }[] = [
 ];
 
 export default function Shop() {
+  const { items: catalog } = useCatalog();
   const [filter, setFilter] = useState<Filter>('all');
 
   const items = useMemo(
-    () => (filter === 'all' ? CATALOG : CATALOG.filter((i) => i.tags.includes(filter))),
-    [filter],
+    () => (filter === 'all' ? catalog : catalog.filter((i) => i.tags.includes(filter))),
+    [filter, catalog],
   );
 
   return (

@@ -1,5 +1,5 @@
 import type { Item } from '../data/catalog';
-import { BUSINESS, UPI, inr } from './constants';
+import { BANK, BUSINESS, UPI, inr } from './constants';
 
 export interface Customer {
   name: string;
@@ -11,6 +11,14 @@ export interface Customer {
   fulfilment: 'delivery' | 'pickup';
 }
 
+/**
+ * How the customer chose to pay.
+ *  upi   — scanned the QR / opened a UPI app
+ *  bank  — NEFT / IMPS / RTGS from their netbanking or banking app
+ *  later — reserving now, settling at the showroom
+ */
+export type PayMethod = 'upi' | 'bank' | 'later';
+
 export interface OrderPayload {
   orderId: string;
   customer: Customer;
@@ -20,7 +28,10 @@ export interface OrderPayload {
   shipping: number;
   total: number;
   isWholesale: boolean;
+  method: PayMethod;
   paid: boolean;
+  /** UPI transaction ID or bank UTR — lets the shop match the credit. */
+  reference: string;
 }
 
 /** Short human-readable order reference, e.g. IDLF-4F92. */
@@ -47,6 +58,15 @@ export function ownerMessage(o: OrderPayload) {
       ? 'Pickup at showroom'
       : `${o.customer.address}, ${o.customer.city} – ${o.customer.pincode}`;
 
+  let payment: string;
+  if (!o.paid) {
+    payment = 'To be settled at the showroom';
+  } else if (o.method === 'bank') {
+    payment = `PAID by bank transfer to ${BANK.accountNumber} (${BANK.ifsc})`;
+  } else {
+    payment = `PAID by UPI to ${UPI.vpa}`;
+  }
+
   return [
     `*NEW ORDER PLACED* — ${o.orderId}`,
     ``,
@@ -64,7 +84,8 @@ export function ownerMessage(o: OrderPayload) {
     `Shipping: ${o.shipping === 0 ? 'Free' : inr(o.shipping)}`,
     `*TOTAL: ${inr(o.total)}*`,
     ``,
-    `*Payment:* ${o.paid ? `Paid via UPI to ${UPI.vpa}` : 'To be collected / pay on confirmation'}`,
+    `*Payment:* ${payment}`,
+    o.paid && o.reference ? `*Reference / UTR:* ${o.reference}` : '',
     o.customer.notes ? `\n*Notes:* ${o.customer.notes}` : '',
     ``,
     `— sent from ${BUSINESS.name} website`,
@@ -84,3 +105,6 @@ export function upiLink(o: OrderPayload) {
   });
   return `upi://pay?${p.toString()}`;
 }
+
+export const waOrderLink = (o: OrderPayload) =>
+  `https://wa.me/${BUSINESS.whatsappNumber}?text=${encodeURIComponent(ownerMessage(o))}`;

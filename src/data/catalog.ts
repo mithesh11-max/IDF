@@ -1,19 +1,33 @@
 /**
- * THE SHOP CATALOG — this is the file the showroom edits day to day.
+ * FALLBACK CATALOG
  *
- * To mark something sold out:      stock: 'out'
- * To feature something:            add 'best-seller' / 'new-arrival' / 'festival' / 'seasonal' to tags
- * To change a price:               edit pricePerMetre (plain number, rupees per metre)
+ * This file is the safety net that ships inside the JavaScript bundle. The
+ * live catalog the shop edits day to day is `public/catalog.json`, which the
+ * site loads at page load — see `src/lib/catalogSource.ts`.
+ *
+ * Editing this file still works, but it needs a rebuild. To change a price or
+ * mark something sold out WITHOUT rebuilding, use the editor at /#/admin.
  */
 
-export type Stock = 'in' | 'low' | 'out';
+export const STOCK_VALUES = ['in', 'low', 'out'] as const;
+export type Stock = (typeof STOCK_VALUES)[number];
 
-export type Tag = 'best-seller' | 'new-arrival' | 'festival' | 'seasonal' | 'wholesale';
+export const TAG_VALUES = [
+  'best-seller',
+  'new-arrival',
+  'festival',
+  'seasonal',
+  'wholesale',
+] as const;
+export type Tag = (typeof TAG_VALUES)[number];
+
+export const CATEGORY_VALUES = ['Bridal', 'Heritage', 'Contemporary'] as const;
+export type Category = (typeof CATEGORY_VALUES)[number];
 
 export interface Item {
   id: string;
   name: string;
-  category: 'Bridal' | 'Heritage' | 'Contemporary';
+  category: Category;
   composition: string;
   width: string;
   pricePerMetre: number;

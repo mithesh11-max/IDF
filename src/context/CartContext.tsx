@@ -7,7 +7,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { CATALOG, type Item } from '../data/catalog';
+import { type Item } from '../data/catalog';
+import { useCatalog } from './CatalogContext';
 import { ORDER } from '../lib/constants';
 
 export interface CartLine {
@@ -36,6 +37,9 @@ const CartCtx = createContext<CartValue | null>(null);
 const STORAGE_KEY = 'idlf_cart_v1';
 
 export function CartProvider({ children }: { children: ReactNode }) {
+  // Prices and stock come from the LIVE catalog, so a cart left open overnight
+  // reprices itself against today's numbers instead of yesterday's.
+  const { byId } = useCatalog();
   const [lines, setLines] = useState<CartLine[]>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -81,7 +85,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<CartValue>(() => {
     const items = lines.flatMap((l) => {
-      const item = CATALOG.find((p) => p.id === l.id);
+      const item = byId(l.id);
       if (!item || item.stock === 'out') return [];
       return [{ item, metres: l.metres, lineTotal: item.pricePerMetre * l.metres }];
     });
@@ -110,7 +114,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       open,
       setOpen,
     };
-  }, [lines, open, add, setMetres, remove, clear]);
+  }, [lines, open, add, setMetres, remove, clear, byId]);
 
   return <CartCtx.Provider value={value}>{children}</CartCtx.Provider>;
 }

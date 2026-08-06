@@ -1,10 +1,28 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import QRCode from 'qrcode';
-import { Check, Copy, MessageCircle, ShieldCheck, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  Building2,
+  Check,
+  Copy,
+  MessageCircle,
+  ShieldCheck,
+  Smartphone,
+  X,
+} from 'lucide-react';
 import { useCart } from '../context/CartContext';
-import { BUSINESS, UPI, inr } from '../lib/constants';
-import { newOrderId, ownerMessage, upiLink, type Customer, type OrderPayload } from '../lib/order';
+import { BANK, BUSINESS, UPI, inr } from '../lib/constants';
+import {
+  newOrderId,
+  ownerMessage,
+  upiLink,
+  waOrderLink,
+  type Customer,
+  type OrderPayload,
+  type PayMethod,
+} from '../lib/order';
+import { clearPending, writePending } from '../lib/pendingOrder';
 
 interface Props {
   open: boolean;
@@ -21,23 +39,80 @@ const EMPTY: Customer = {
   fulfilment: 'delivery',
 };
 
+/** Small reusable copy-to-clipboard row for account numbers and IFSC. */
+function CopyRow({ label, value }: { label: string; value: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-ivory/10 py-2.5 last:border-0">
+      <span className="shrink-0 text-[11px] uppercase tracking-[0.14em] text-ivory/45">
+        {label}
+      </span>
+      <button
+        type="button"
+        onClick={() => {
+          navigator.clipboard?.writeText(value);
+          setDone(true);
+          setTimeout(() => setDone(false), 1600);
+        }}
+        className="flex min-w-0 items-center gap-2 text-right text-[13px] text-ivory transition-colors hover:text-gold"
+      >
+        <span className="truncate font-medium">{value}</span>
+        {done ? (
+          <Check className="h-3.5 w-3.5 shrink-0 text-gold" />
+        ) : (
+          <Copy className="h-3.5 w-3.5 shrink-0 text-ivory/40" />
+        )}
+      </button>
+    </div>
+  );
+}
+
 export default function CheckoutModal({ open, onClose }: Props) {
   const { items, subtotal, discount, shipping, total, isWholesale, clear, setOpen } = useCart();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+
+  // 1 details → 2 payment → 3 confirm the WhatsApp send → 4 done
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [customer, setCustomer] = useState<Customer>(EMPTY);
   const [errors, setErrors] = useState<Partial<Record<keyof Customer, string>>>({});
   const [orderId, setOrderId] = useState(newOrderId);
+  const [method, setMethod] = useState<PayMethod>('upi');
   const [paid, setPaid] = useState(false);
+  const [reference, setReference] = useState('');
   const [qr, setQr] = useState('');
   const [copied, setCopied] = useState(false);
+  const [msgCopied, setMsgCopied] = useState(false);
 
   const order = useMemo<OrderPayload>(
-    () => ({ orderId, customer, items, subtotal, discount, shipping, total, isWholesale, paid }),
-    [orderId, customer, items, subtotal, discount, shipping, total, isWholesale, paid],
+    () => ({
+      orderId,
+      customer,
+      items,
+      subtotal,
+      discount,
+      shipping,
+      total,
+      isWholesale,
+      method,
+      paid,
+      reference: reference.trim(),
+    }),
+    [
+      orderId,
+      customer,
+      items,
+      subtotal,
+      discount,
+      shipping,
+      total,
+      isWholesale,
+      method,
+      paid,
+      reference,
+    ],
   );
 
   useEffect(() => {
-    if (step !== 2) return;
+    if (step !== 2 || method !== 'upi') return;
     QRCode.toDataURL(upiLink(order), {
       width: 420,
       margin: 1,
@@ -45,7 +120,7 @@ export default function CheckoutModal({ open, onClose }: Props) {
     })
       .then(setQr)
       .catch(() => setQr(''));
-  }, [step, order]);
+  }, [step, method, order]);
 
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : '';
@@ -79,13 +154,32 @@ export default function CheckoutModal({ open, onClose }: Props) {
       errors[k] ? 'border-maroon' : 'border-ivory/15'
     }`;
 
-  const sendToWhatsApp = () => {
-    window.open(
-      `https://wa.me/${BUSINESS.whatsappNumber}?text=${encodeURIComponent(ownerMessage(order))}`,
-      '_blank',
-      'noopener',
-    );
+  /**
+   * Opens WhatsApp and records the order as PENDING — deliberately not as
+   * complete. We have no way to observe whether the customer actually pressed
+   * Send inside WhatsApp, so we assume they did not until they tell us.
+   */
+  const openWhatsApp = () => {
+    const link = waOrderLink(order);
+    writePending({
+      orderId,
+      total,
+      message: ownerMessage(order),
+      waLink: link,
+      createdAt: Date.now(),
+      attempts: 1,
+    });
+    window.open(link, '_blank', 'noopener');
     setStep(3);
+  };
+
+  const retryWhatsApp = () => {
+    window.open(waOrderLink(order), '_blank', 'noopener');
+  };
+
+  const confirmSent = () => {
+    clearPending();
+    setStep(4);
   };
 
   const finish = () => {
@@ -93,10 +187,22 @@ export default function CheckoutModal({ open, onClose }: Props) {
     setCustomer(EMPTY);
     setStep(1);
     setPaid(false);
+    setMethod('upi');
+    setReference('');
     setOrderId(newOrderId());
     onClose();
     setOpen(false);
   };
+
+  const stepLabel =
+    step === 1 ? 'Your Details' : step === 2 ? 'Payment' : step === 3 ? 'Confirm Send' : 'Order Sent';
+
+  const payTabs: { id: PayMethod; label: string; icon: typeof Smartphone }[] = [
+    { id: 'upi', label: 'UPI', icon: Smartphone },
+    ...(BANK.enabled
+      ? [{ id: 'bank' as PayMethod, label: 'Bank Transfer', icon: Building2 }]
+      : []),
+  ];
 
   return (
     <AnimatePresence>
@@ -119,11 +225,9 @@ export default function CheckoutModal({ open, onClose }: Props) {
           >
             <header className="flex shrink-0 items-center justify-between border-b border-gold/20 px-5 py-4">
               <div>
-                <h2 className="font-serif text-xl text-ivory">
-                  {step === 1 ? 'Your Details' : step === 2 ? 'Payment' : 'Order Sent'}
-                </h2>
+                <h2 className="font-serif text-xl text-ivory">{stepLabel}</h2>
                 <p className="mt-0.5 text-[11px] uppercase tracking-[0.2em] text-gold/70">
-                  Order {orderId} · Step {step} of 3
+                  Order {orderId} · Step {Math.min(step, 3)} of 3
                 </p>
               </div>
               <button
@@ -137,7 +241,7 @@ export default function CheckoutModal({ open, onClose }: Props) {
             </header>
 
             <div className="flex-1 overflow-y-auto px-5 py-5">
-              {/* STEP 1 — details */}
+              {/* ============ STEP 1 — details ============ */}
               {step === 1 && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-2">
@@ -224,7 +328,7 @@ export default function CheckoutModal({ open, onClose }: Props) {
                 </div>
               )}
 
-              {/* STEP 2 — payment */}
+              {/* ============ STEP 2 — payment ============ */}
               {step === 2 && (
                 <div className="space-y-5">
                   <div className="rounded-[3px] border border-gold/25 bg-night/40 p-4">
@@ -234,55 +338,123 @@ export default function CheckoutModal({ open, onClose }: Props) {
                     </div>
                   </div>
 
-                  <div className="text-center">
-                    <p className="text-[12px] uppercase tracking-[0.2em] text-gold">Pay by UPI</p>
-                    {qr && (
-                      <img
-                        src={qr}
-                        alt="UPI payment QR code"
-                        className="mx-auto mt-3 h-52 w-52 rounded-[3px]"
-                      />
-                    )}
-                    <p className="mt-3 text-[12px] text-ivory/50">
-                      Scan with GPay, PhonePe, Paytm or any UPI app
-                    </p>
+                  {/* Method switcher */}
+                  {payTabs.length > 1 && (
+                    <div className="grid grid-cols-2 gap-2">
+                      {payTabs.map((t) => {
+                        const active = method === t.id;
+                        const Icon = t.icon;
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => {
+                              setMethod(t.id);
+                              setPaid(false);
+                              setReference('');
+                            }}
+                            className={`flex items-center justify-center gap-2 rounded-[2px] border px-3 py-3 text-[12px] font-semibold uppercase tracking-[0.12em] transition-colors ${
+                              active
+                                ? 'border-gold bg-gold/10 text-gold'
+                                : 'border-ivory/15 text-ivory/55 hover:border-ivory/30'
+                            }`}
+                          >
+                            <Icon className="h-4 w-4" />
+                            {t.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
 
-                    <a
-                      href={upiLink(order)}
-                      className="btn btn-gold btn-sheen mt-4 w-full sm:hidden"
-                    >
-                      Open UPI App to Pay
-                    </a>
+                  {/* ---- UPI ---- */}
+                  {method === 'upi' && (
+                    <div className="text-center">
+                      {qr && (
+                        <img
+                          src={qr}
+                          alt="UPI payment QR code"
+                          className="mx-auto h-52 w-52 rounded-[3px]"
+                        />
+                      )}
+                      <p className="mt-3 text-[12px] text-ivory/50">
+                        Scan with GPay, PhonePe, Paytm or any UPI app
+                      </p>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard?.writeText(UPI.vpa);
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 1800);
-                      }}
-                      className="mt-3 inline-flex items-center gap-2 text-[12px] tracking-wide text-ivory/60 transition-colors hover:text-gold"
-                    >
-                      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                      {UPI.vpa}
-                    </button>
-                  </div>
+                      <a href={upiLink(order)} className="btn btn-gold btn-sheen mt-4 w-full sm:hidden">
+                        Open UPI App to Pay
+                      </a>
 
-                  <label className="flex cursor-pointer items-start gap-3 rounded-[3px] border border-ivory/15 p-3.5">
-                    <input
-                      type="checkbox"
-                      checked={paid}
-                      onChange={(e) => setPaid(e.target.checked)}
-                      className="mt-0.5 h-4 w-4 shrink-0 accent-[#C8A24B]"
-                    />
-                    <span className="text-[13px] leading-relaxed text-ivory/70">
-                      I have completed the UPI payment of {inr(total)}
-                    </span>
-                  </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(UPI.vpa);
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 1800);
+                        }}
+                        className="mt-3 inline-flex items-center gap-2 text-[12px] tracking-wide text-ivory/60 transition-colors hover:text-gold"
+                      >
+                        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                        {UPI.vpa}
+                      </button>
+                    </div>
+                  )}
 
-                  <button type="button" onClick={sendToWhatsApp} className="btn btn-gold btn-sheen w-full">
+                  {/* ---- Bank transfer / netbanking ---- */}
+                  {method === 'bank' && (
+                    <div className="rounded-[3px] border border-ivory/15 bg-night/40 px-4 py-2">
+                      <CopyRow label="Account name" value={BANK.accountName} />
+                      <CopyRow label="Account no." value={BANK.accountNumber} />
+                      <CopyRow label="IFSC" value={BANK.ifsc} />
+                      <CopyRow label="Bank" value={`${BANK.bankName}, ${BANK.branch}`} />
+                      <CopyRow label="Amount" value={String(total)} />
+                      <p className="border-t border-ivory/10 py-3 text-[12px] leading-relaxed text-ivory/50">
+                        Transfer by NEFT, IMPS or RTGS from your netbanking or banking app, using
+                        <span className="text-gold"> {orderId} </span>
+                        as the remark. Then enter the UTR below so the showroom can match your
+                        payment.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* ---- Confirmation + reference ---- */}
+                  {method !== 'later' && (
+                    <div className="space-y-3">
+                      <label className="flex cursor-pointer items-start gap-3 rounded-[3px] border border-ivory/15 p-3.5">
+                        <input
+                          type="checkbox"
+                          checked={paid}
+                          onChange={(e) => setPaid(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 shrink-0 accent-[#C8A24B]"
+                        />
+                        <span className="text-[13px] leading-relaxed text-ivory/70">
+                          I have completed the {method === 'bank' ? 'bank transfer' : 'UPI payment'}{' '}
+                          of {inr(total)}
+                        </span>
+                      </label>
+
+                      {paid && (
+                        <input
+                          value={reference}
+                          onChange={(e) => setReference(e.target.value)}
+                          placeholder={
+                            method === 'bank'
+                              ? 'UTR / reference number (from your bank)'
+                              : 'UPI transaction ID (optional but helpful)'
+                          }
+                          className="w-full rounded-[2px] border border-ivory/15 bg-night/40 px-3.5 py-3 text-[14px] text-ivory placeholder-ivory/30 outline-none focus:border-gold"
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={openWhatsApp}
+                    className="btn btn-gold btn-sheen w-full"
+                  >
                     <MessageCircle className="h-4 w-4" />
-                    {paid ? 'Send Order & Payment Proof' : 'Place Order — Pay Later'}
+                    {paid ? 'Send Order on WhatsApp' : 'Place Order — Pay Later'}
                   </button>
 
                   <p className="flex items-start gap-2 text-[11px] leading-relaxed text-ivory/40">
@@ -301,8 +473,69 @@ export default function CheckoutModal({ open, onClose }: Props) {
                 </div>
               )}
 
-              {/* STEP 3 — done */}
+              {/* ============ STEP 3 — did you actually press Send? ============ */}
               {step === 3 && (
+                <div className="space-y-5">
+                  <div className="flex items-start gap-3 rounded-[3px] border border-gold/40 bg-gold/10 p-4">
+                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-gold" />
+                    <div>
+                      <p className="text-[14px] font-semibold text-ivory">
+                        One last step — press Send in WhatsApp
+                      </p>
+                      <p className="mt-1.5 text-[13px] leading-relaxed text-ivory/65">
+                        WhatsApp has opened with your order typed out, but the message is not sent
+                        until you press the send button yourself. Until then the showroom has not
+                        received anything.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button type="button" onClick={confirmSent} className="btn btn-gold btn-sheen w-full">
+                    <Check className="h-4 w-4" />
+                    Yes — I pressed Send
+                  </button>
+
+                  <div className="space-y-2.5 rounded-[3px] border border-ivory/15 p-4">
+                    <p className="text-[12px] uppercase tracking-[0.16em] text-ivory/45">
+                      WhatsApp didn't open?
+                    </p>
+                    <button
+                      type="button"
+                      onClick={retryWhatsApp}
+                      className="btn btn-ghost-light w-full"
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                      Open WhatsApp again
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(ownerMessage(order));
+                        setMsgCopied(true);
+                        setTimeout(() => setMsgCopied(false), 2200);
+                      }}
+                      className="w-full py-2 text-[12px] tracking-wide text-ivory/55 transition-colors hover:text-gold"
+                    >
+                      {msgCopied
+                        ? '✓ Order copied — paste it into WhatsApp'
+                        : 'Copy the order text instead'}
+                    </button>
+                    <p className="text-center text-[12px] text-ivory/45">
+                      or call{' '}
+                      <a href={`tel:${BUSINESS.phoneRaw}`} className="text-gold">
+                        {BUSINESS.phoneDisplay}
+                      </a>
+                    </p>
+                  </div>
+
+                  <p className="text-center text-[11px] leading-relaxed text-ivory/35">
+                    Your cart is kept safe until you confirm. Nothing is lost if you close this.
+                  </p>
+                </div>
+              )}
+
+              {/* ============ STEP 4 — done ============ */}
+              {step === 4 && (
                 <div className="space-y-5 py-4 text-center">
                   <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-gold/40 bg-gold/10">
                     <Check className="h-7 w-7 text-gold" />
