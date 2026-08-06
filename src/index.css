@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+  html,
+  body {
+    overflow-x: clip;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  body {
+    @apply bg-ivory font-sans text-ink antialiased;
+  }
+  ::selection {
+    @apply bg-maroon text-ivory;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-serif;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-gold ring-offset-2 ring-offset-ivory;
+  }
+}
+
+@layer components {
+  .container-lux {
+    @apply mx-auto w-full max-w-6xl px-5 sm:px-8;
+  }
+  .kicker {
+    @apply text-[11px] font-semibold uppercase tracking-[0.34em] text-gold-dark;
+  }
+  .kicker-light {
+    @apply text-[11px] font-semibold uppercase tracking-[0.34em] text-gold;
+  }
+
+  .btn {
+    @apply relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-[2px] px-7 py-3.5 text-[12px] font-semibold uppercase tracking-[0.2em] transition-all duration-500 ease-lux;
+  }
+  .btn-gold {
+    @apply bg-gold text-night hover:bg-gold-light hover:shadow-[0_18px_38px_-16px_rgba(200,162,75,0.7)];
+  }
+  .btn-ghost-light {
+    @apply border border-ivory/40 text-ivory hover:border-gold hover:text-gold;
+  }
+  .btn-ghost-dark {
+    @apply border border-walnut/40 text-ink hover:border-gold-dark hover:text-gold-dark;
+  }
+  .btn-sheen::before {
+    content: '';
+    @apply absolute inset-y-0 -left-3/4 w-1/2 -skew-x-12 bg-white/25 transition-all duration-700 ease-lux;
+  }
+  .btn-sheen:hover::before {
+    left: 125%;
+  }
+
+  .img-zoom {
+    @apply transition-transform duration-[1500ms] ease-lux;
+  }
+  .group:hover .img-zoom {
+    @apply scale-105;
+  }
+
+  .frame-hover {
+    @apply pointer-events-none absolute inset-3 border border-transparent transition-all duration-700 ease-lux;
+  }
+  .group:hover .frame-hover {
+    @apply inset-4 border-gold/70;
+  }
+
+  .map-tint {
+    filter: sepia(0.22) saturate(0.85) contrast(1.02);
+  }
+}
