@@ -33,12 +33,12 @@ export default function Preloader() {
           aria-hidden="true"
         >
           <motion.img
-            src="/images/logo/logo-full.png"
+            src="/images/logo/logo-full-dark.png"
             alt=""
             initial={{ opacity: 0, scale: 0.94 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
-            className="h-auto max-h-[46vh] w-auto max-w-[220px] object-contain sm:max-w-[260px]"
+            className="h-auto max-h-[38vh] w-auto max-w-[280px] object-contain sm:max-w-[360px]"
           />
         </motion.div>
       )}
