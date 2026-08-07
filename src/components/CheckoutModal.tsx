@@ -1,18 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import QRCode from 'qrcode';
-import {
-  AlertTriangle,
-  Building2,
-  Check,
-  Copy,
-  MessageCircle,
-  ShieldCheck,
-  Smartphone,
-  X,
-} from 'lucide-react';
+import { AlertTriangle, Check, Copy, MessageCircle, ShieldCheck, X } from 'lucide-react';
 import { useCart } from '../context/CartContext';
-import { BANK, BUSINESS, UPI, inr } from '../lib/constants';
+import { BUSINESS, UPI, inr } from '../lib/constants';
 import {
   newOrderId,
   ownerMessage,
@@ -20,7 +11,6 @@ import {
   waOrderLink,
   type Customer,
   type OrderPayload,
-  type PayMethod,
 } from '../lib/order';
 import { clearPending, writePending } from '../lib/pendingOrder';
 
@@ -39,34 +29,6 @@ const EMPTY: Customer = {
   fulfilment: 'delivery',
 };
 
-/** Small reusable copy-to-clipboard row for account numbers and IFSC. */
-function CopyRow({ label, value }: { label: string; value: string }) {
-  const [done, setDone] = useState(false);
-  return (
-    <div className="flex items-center justify-between gap-3 border-b border-ivory/10 py-2.5 last:border-0">
-      <span className="shrink-0 text-[11px] uppercase tracking-[0.14em] text-ivory/45">
-        {label}
-      </span>
-      <button
-        type="button"
-        onClick={() => {
-          navigator.clipboard?.writeText(value);
-          setDone(true);
-          setTimeout(() => setDone(false), 1600);
-        }}
-        className="flex min-w-0 items-center gap-2 text-right text-[13px] text-ivory transition-colors hover:text-gold"
-      >
-        <span className="truncate font-medium">{value}</span>
-        {done ? (
-          <Check className="h-3.5 w-3.5 shrink-0 text-gold" />
-        ) : (
-          <Copy className="h-3.5 w-3.5 shrink-0 text-ivory/40" />
-        )}
-      </button>
-    </div>
-  );
-}
-
 export default function CheckoutModal({ open, onClose }: Props) {
   const { items, subtotal, discount, shipping, total, isWholesale, clear, setOpen } = useCart();
 
@@ -75,7 +37,6 @@ export default function CheckoutModal({ open, onClose }: Props) {
   const [customer, setCustomer] = useState<Customer>(EMPTY);
   const [errors, setErrors] = useState<Partial<Record<keyof Customer, string>>>({});
   const [orderId, setOrderId] = useState(newOrderId);
-  const [method, setMethod] = useState<PayMethod>('upi');
   const [paid, setPaid] = useState(false);
   const [reference, setReference] = useState('');
   const [qr, setQr] = useState('');
@@ -92,35 +53,23 @@ export default function CheckoutModal({ open, onClose }: Props) {
       shipping,
       total,
       isWholesale,
-      method,
+      method: paid ? 'upi' : 'later',
       paid,
       reference: reference.trim(),
     }),
-    [
-      orderId,
-      customer,
-      items,
-      subtotal,
-      discount,
-      shipping,
-      total,
-      isWholesale,
-      method,
-      paid,
-      reference,
-    ],
+    [orderId, customer, items, subtotal, discount, shipping, total, isWholesale, paid, reference],
   );
 
   useEffect(() => {
-    if (step !== 2 || method !== 'upi') return;
+    if (step !== 2 || UPI.staticQrImage) return;
     QRCode.toDataURL(upiLink(order), {
       width: 420,
       margin: 1,
-      color: { dark: '#1A120C', light: '#F6F1E7' },
+      color: { dark: '#1c0505', light: '#EADDD5' },
     })
       .then(setQr)
       .catch(() => setQr(''));
-  }, [step, method, order]);
+  }, [step, order]);
 
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : '';
@@ -187,7 +136,6 @@ export default function CheckoutModal({ open, onClose }: Props) {
     setCustomer(EMPTY);
     setStep(1);
     setPaid(false);
-    setMethod('upi');
     setReference('');
     setOrderId(newOrderId());
     onClose();
@@ -196,13 +144,6 @@ export default function CheckoutModal({ open, onClose }: Props) {
 
   const stepLabel =
     step === 1 ? 'Your Details' : step === 2 ? 'Payment' : step === 3 ? 'Confirm Send' : 'Order Sent';
-
-  const payTabs: { id: PayMethod; label: string; icon: typeof Smartphone }[] = [
-    { id: 'upi', label: 'UPI', icon: Smartphone },
-    ...(BANK.enabled
-      ? [{ id: 'bank' as PayMethod, label: 'Bank Transfer', icon: Building2 }]
-      : []),
-  ];
 
   return (
     <AnimatePresence>
@@ -224,11 +165,19 @@ export default function CheckoutModal({ open, onClose }: Props) {
             className="flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-t-[6px] bg-chocolate sm:rounded-[4px]"
           >
             <header className="flex shrink-0 items-center justify-between border-b border-gold/20 px-5 py-4">
-              <div>
-                <h2 className="font-serif text-xl text-ivory">{stepLabel}</h2>
-                <p className="mt-0.5 text-[11px] uppercase tracking-[0.2em] text-gold/70">
-                  Order {orderId} · Step {Math.min(step, 3)} of 3
-                </p>
+              <div className="flex items-center gap-3">
+                <img
+                  src="/images/logo/logo-mark.png"
+                  alt=""
+                  aria-hidden="true"
+                  className="h-9 w-9 shrink-0 object-contain"
+                />
+                <div>
+                  <h2 className="font-serif text-xl text-ivory">{stepLabel}</h2>
+                  <p className="mt-0.5 text-[11px] uppercase tracking-[0.2em] text-gold/70">
+                    Order {orderId} · Step {Math.min(step, 3)} of 3
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
@@ -338,115 +287,56 @@ export default function CheckoutModal({ open, onClose }: Props) {
                     </div>
                   </div>
 
-                  {/* Method switcher */}
-                  {payTabs.length > 1 && (
-                    <div className="grid grid-cols-2 gap-2">
-                      {payTabs.map((t) => {
-                        const active = method === t.id;
-                        const Icon = t.icon;
-                        return (
-                          <button
-                            key={t.id}
-                            type="button"
-                            onClick={() => {
-                              setMethod(t.id);
-                              setPaid(false);
-                              setReference('');
-                            }}
-                            className={`flex items-center justify-center gap-2 rounded-[2px] border px-3 py-3 text-[12px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-                              active
-                                ? 'border-gold bg-gold/10 text-gold'
-                                : 'border-ivory/15 text-ivory/55 hover:border-ivory/30'
-                            }`}
-                          >
-                            <Icon className="h-4 w-4" />
-                            {t.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
+                  <div className="text-center">
+                    <img
+                      src={UPI.staticQrImage || qr}
+                      alt="UPI payment QR code"
+                      className="mx-auto h-56 w-56 rounded-[3px] border border-gold/20 bg-ivory object-contain p-2"
+                    />
+                    <p className="mt-3 text-[12px] text-ivory/50">
+                      Scan with GPay, PhonePe, Paytm or any UPI app
+                    </p>
 
-                  {/* ---- UPI ---- */}
-                  {method === 'upi' && (
-                    <div className="text-center">
-                      {qr && (
-                        <img
-                          src={qr}
-                          alt="UPI payment QR code"
-                          className="mx-auto h-52 w-52 rounded-[3px]"
-                        />
-                      )}
-                      <p className="mt-3 text-[12px] text-ivory/50">
-                        Scan with GPay, PhonePe, Paytm or any UPI app
-                      </p>
+                    <a href={upiLink(order)} className="btn btn-gold btn-sheen mt-4 w-full sm:hidden">
+                      Open UPI App to Pay
+                    </a>
 
-                      <a href={upiLink(order)} className="btn btn-gold btn-sheen mt-4 w-full sm:hidden">
-                        Open UPI App to Pay
-                      </a>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(UPI.vpa);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 1800);
+                      }}
+                      className="mt-3 inline-flex items-center gap-2 text-[12px] tracking-wide text-ivory/60 transition-colors hover:text-gold"
+                    >
+                      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                      {UPI.vpa}
+                    </button>
+                  </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard?.writeText(UPI.vpa);
-                          setCopied(true);
-                          setTimeout(() => setCopied(false), 1800);
-                        }}
-                        className="mt-3 inline-flex items-center gap-2 text-[12px] tracking-wide text-ivory/60 transition-colors hover:text-gold"
-                      >
-                        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                        {UPI.vpa}
-                      </button>
-                    </div>
-                  )}
+                  <div className="space-y-3">
+                    <label className="flex cursor-pointer items-start gap-3 rounded-[3px] border border-ivory/15 p-3.5">
+                      <input
+                        type="checkbox"
+                        checked={paid}
+                        onChange={(e) => setPaid(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-[#d3aa32]"
+                      />
+                      <span className="text-[13px] leading-relaxed text-ivory/70">
+                        I have completed the UPI payment of {inr(total)}
+                      </span>
+                    </label>
 
-                  {/* ---- Bank transfer / netbanking ---- */}
-                  {method === 'bank' && (
-                    <div className="rounded-[3px] border border-ivory/15 bg-night/40 px-4 py-2">
-                      <CopyRow label="Account name" value={BANK.accountName} />
-                      <CopyRow label="Account no." value={BANK.accountNumber} />
-                      <CopyRow label="IFSC" value={BANK.ifsc} />
-                      <CopyRow label="Bank" value={`${BANK.bankName}, ${BANK.branch}`} />
-                      <CopyRow label="Amount" value={String(total)} />
-                      <p className="border-t border-ivory/10 py-3 text-[12px] leading-relaxed text-ivory/50">
-                        Transfer by NEFT, IMPS or RTGS from your netbanking or banking app, using
-                        <span className="text-gold"> {orderId} </span>
-                        as the remark. Then enter the UTR below so the showroom can match your
-                        payment.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* ---- Confirmation + reference ---- */}
-                  {method !== 'later' && (
-                    <div className="space-y-3">
-                      <label className="flex cursor-pointer items-start gap-3 rounded-[3px] border border-ivory/15 p-3.5">
-                        <input
-                          type="checkbox"
-                          checked={paid}
-                          onChange={(e) => setPaid(e.target.checked)}
-                          className="mt-0.5 h-4 w-4 shrink-0 accent-[#C8A24B]"
-                        />
-                        <span className="text-[13px] leading-relaxed text-ivory/70">
-                          I have completed the {method === 'bank' ? 'bank transfer' : 'UPI payment'}{' '}
-                          of {inr(total)}
-                        </span>
-                      </label>
-
-                      {paid && (
-                        <input
-                          value={reference}
-                          onChange={(e) => setReference(e.target.value)}
-                          placeholder={
-                            method === 'bank'
-                              ? 'UTR / reference number (from your bank)'
-                              : 'UPI transaction ID (optional but helpful)'
-                          }
-                          className="w-full rounded-[2px] border border-ivory/15 bg-night/40 px-3.5 py-3 text-[14px] text-ivory placeholder-ivory/30 outline-none focus:border-gold"
-                        />
-                      )}
-                    </div>
-                  )}
+                    {paid && (
+                      <input
+                        value={reference}
+                        onChange={(e) => setReference(e.target.value)}
+                        placeholder="UPI transaction ID (optional but helpful)"
+                        className="w-full rounded-[2px] border border-ivory/15 bg-night/40 px-3.5 py-3 text-[14px] text-ivory placeholder-ivory/30 outline-none focus:border-gold"
+                      />
+                    )}
+                  </div>
 
                   <button
                     type="button"

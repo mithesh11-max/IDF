@@ -34,7 +34,7 @@ export default function Navbar() {
       }`}
     >
       <div className="container-lux flex items-center justify-between gap-3">
-        <a href="#top" aria-label="In Design Luxury Fabrics — back to top" className="shrink-0">
+        <a href="/#top" aria-label="In Design Luxury Fabrics — back to top" className="shrink-0">
           <Wordmark tone="light" />
         </a>
 

@@ -47,7 +47,7 @@
     @apply relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-[2px] px-7 py-3.5 text-[12px] font-semibold uppercase tracking-[0.2em] transition-all duration-500 ease-lux;
   }
   .btn-gold {
-    @apply bg-gold text-night hover:bg-gold-light hover:shadow-[0_18px_38px_-16px_rgba(200,162,75,0.7)];
+    @apply bg-gold text-night hover:bg-gold-light hover:shadow-[0_18px_38px_-16px_rgba(211,170,50,0.7)];
   }
   .btn-ghost-light {
     @apply border border-ivory/40 text-ivory hover:border-gold hover:text-gold;

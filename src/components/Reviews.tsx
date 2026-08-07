@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Heart, Lock, Star, X } from 'lucide-react';
+import { Heart, LogOut, Lock, Star, X } from 'lucide-react';
 import { REVIEWS, type Review } from '../data/reviews';
 import { loadReviews } from '../lib/reviewSource';
+import { supabase } from '../lib/supabase';
 import { BUSINESS, REVIEW_PUBLISH_THRESHOLD } from '../lib/constants';
+import { useAuth } from '../context/AuthContext';
+import AuthGate from './AuthGate';
 import Reveal from './Reveal';
 import SectionHeading from './SectionHeading';
 
@@ -21,12 +24,76 @@ function Stars({ n, size = 'h-3.5 w-3.5' }: { n: number; size?: string }) {
   );
 }
 
+/** Row shape as it comes back from the `reviews` table. */
+interface SupaReview {
+  id: string;
+  name: string;
+  city: string;
+  rating: number;
+  review_text: string;
+  created_at: string;
+}
+
 export default function Reviews() {
+  const { enabled, user, loading: authLoading, signOut } = useAuth();
+
   /**
-   * Only reviews the showroom has approved are shown. They load at runtime from
-   * public/reviews.json, so publishing one is a file upload, not a rebuild.
+   * Two independent data sources for the same on-screen list:
+   *  - Supabase, when configured: live query + realtime subscription, so an
+   *    admin publishing a review appears for everyone already on the page.
+   *  - The bundled/JSON fallback otherwise, exactly as before.
    */
   const [published, setPublished] = useState<Review[]>(REVIEWS);
+
+  useEffect(() => {
+    if (enabled && supabase) {
+      const sb = supabase;
+      let cancelled = false;
+
+      const fetchPublished = async () => {
+        const { data } = await sb
+          .from('reviews')
+          .select('name, city, rating, review_text, created_at')
+          .eq('status', 'published')
+          .order('created_at', { ascending: false });
+        if (!cancelled && data) {
+          setPublished(
+            (data as SupaReview[]).map((r) => ({
+              name: r.name,
+              city: r.city,
+              rating: r.rating,
+              text: r.review_text,
+              date: new Date(r.created_at).toLocaleDateString('en-IN', {
+                month: 'short',
+                year: 'numeric',
+              }),
+            })),
+          );
+        }
+      };
+
+      fetchPublished();
+
+      const channel = sb
+        .channel('public-reviews-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews' }, fetchPublished)
+        .subscribe();
+
+      return () => {
+        cancelled = true;
+        sb.removeChannel(channel);
+      };
+    }
+
+    // Non-Supabase fallback — unchanged from before.
+    let cancelled = false;
+    loadReviews().then((r) => {
+      if (!cancelled) setPublished(r);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [rating, setRating] = useState(5);
@@ -35,16 +102,16 @@ export default function Reviews() {
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const [sent, setSent] = useState<'public' | 'private' | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
+  // Once signed in, default the name field from the account (Google gives a
+  // real name; email sign-up doesn't, so it starts blank either way is fine).
   useEffect(() => {
-    let cancelled = false;
-    loadReviews().then((r) => {
-      if (!cancelled) setPublished(r);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (user && !name) {
+      const fromGoogle = (user.user_metadata as { full_name?: string; name?: string } | undefined);
+      setName(fromGoogle?.full_name ?? fromGoogle?.name ?? '');
+    }
+  }, [user, name]);
 
   /**
    * The average is computed from exactly the reviews on screen, and labelled as
@@ -59,24 +126,17 @@ export default function Reviews() {
   const isPositive = rating >= REVIEW_PUBLISH_THRESHOLD;
 
   const reset = () => {
-    setName('');
     setCity('');
     setText('');
     setRating(5);
     setError('');
   };
 
-  const submit = () => {
-    if (name.trim().length < 2) return setError('Please enter your name');
-    if (text.trim().length < 12) return setError('Please write a little more about your experience');
-    setError('');
-
+  /** Non-Supabase path: unchanged WhatsApp submission. */
+  const submitViaWhatsApp = () => {
     const who = `${name.trim()}${city.trim() ? `, ${city.trim()}` : ''}`;
     const stars = `${'★'.repeat(rating)}${'☆'.repeat(5 - rating)} (${rating}/5)`;
 
-    // Happy reviews are offered to the shop for publishing. Unhappy ones go to
-    // the owner as private feedback so the customer gets a fix, not a public
-    // argument. Both reach the shop — the difference is what happens next.
     const msg = isPositive
       ? [
           `*NEW REVIEW — OK TO PUBLISH*`,
@@ -104,9 +164,41 @@ export default function Reviews() {
       '_blank',
       'noopener',
     );
-
     setSent(isPositive ? 'public' : 'private');
-    reset();
+  };
+
+  /** Supabase path: a real row, tied to the signed-in account. */
+  const submitViaSupabase = async () => {
+    if (!supabase || !user) return;
+    const sb = supabase;
+    setSubmitting(true);
+    const { error: dbError } = await sb.from('reviews').insert({
+      user_id: user.id,
+      user_email: user.email,
+      name: name.trim(),
+      city: city.trim(),
+      rating,
+      review_text: text.trim(),
+      status: isPositive ? 'pending' : 'private',
+    });
+    setSubmitting(false);
+    if (dbError) {
+      setError(dbError.message);
+      return;
+    }
+    setSent(isPositive ? 'public' : 'private');
+  };
+
+  const submit = () => {
+    if (name.trim().length < 2) return setError('Please enter your name');
+    if (text.trim().length < 12) return setError('Please write a little more about your experience');
+    setError('');
+
+    if (enabled) {
+      submitViaSupabase();
+    } else {
+      submitViaWhatsApp();
+    }
   };
 
   const closeForm = () => {
@@ -121,7 +213,11 @@ export default function Reviews() {
         <SectionHeading
           kicker="Customer Reviews"
           title="What our customers say"
-          sub="A selection of reviews from brides, boutique owners and tailors who buy here."
+          sub={
+            enabled
+              ? 'Verified reviews from signed-in customers — a selection published by the showroom.'
+              : 'A selection of reviews from brides, boutique owners and tailors who buy here.'
+          }
         />
 
         <Reveal className="mt-8 flex flex-col items-center gap-3">
@@ -137,6 +233,16 @@ export default function Reviews() {
           <button type="button" onClick={() => setFormOpen(true)} className="btn btn-ghost-dark mt-2">
             Write a Review
           </button>
+          {enabled && user && (
+            <button
+              type="button"
+              onClick={signOut}
+              className="flex items-center gap-1.5 text-[11px] text-muted transition-colors hover:text-ink"
+            >
+              <LogOut className="h-3 w-3" />
+              Signed in as {user.email} · Sign out
+            </button>
+          )}
         </Reveal>
 
         <div className="mt-10 grid gap-4 sm:mt-12 sm:grid-cols-2 lg:grid-cols-3">
@@ -203,13 +309,27 @@ export default function Reviews() {
                     )}
                   </div>
                   <p className="mx-auto max-w-xs text-[14px] leading-relaxed text-ivory/70">
-                    {sent === 'public'
-                      ? 'Your review is on its way to the showroom on WhatsApp. Press send there and we will add it to the website shortly.'
-                      : 'Your feedback goes straight to the owner on WhatsApp — press send there. Someone will call you to put this right.'}
+                    {enabled
+                      ? sent === 'public'
+                        ? 'Your review is saved and waiting for the showroom to publish it. It will appear here the moment they approve it — no refresh needed.'
+                        : 'Your feedback is saved privately for the owner. Someone will reach out to put this right.'
+                      : sent === 'public'
+                        ? 'Your review is on its way to the showroom on WhatsApp. Press send there and we will add it to the website shortly.'
+                        : 'Your feedback goes straight to the owner on WhatsApp — press send there. Someone will call you to put this right.'}
                   </p>
                   <button type="button" onClick={closeForm} className="btn btn-gold btn-sheen w-full">
                     Close
                   </button>
+                </div>
+              ) : enabled && authLoading ? (
+                <div className="py-10 text-center text-[13px] text-ivory/50">Loading…</div>
+              ) : enabled && !user ? (
+                /* ---- Must sign in before writing a review ---- */
+                <div className="mt-5">
+                  <p className="mb-5 text-center text-[13px] leading-relaxed text-ivory/60">
+                    Sign in so your review shows as a real, verified customer.
+                  </p>
+                  <AuthGate compact />
                 </div>
               ) : (
                 <div className="mt-5 space-y-4">
@@ -263,8 +383,17 @@ export default function Reviews() {
 
                   {error && <p className="text-[12px] text-maroon">{error}</p>}
 
-                  <button type="button" onClick={submit} className="btn btn-gold btn-sheen w-full">
-                    {isPositive ? 'Submit Review' : 'Send Privately to the Owner'}
+                  <button
+                    type="button"
+                    onClick={submit}
+                    disabled={submitting}
+                    className="btn btn-gold btn-sheen w-full"
+                  >
+                    {submitting
+                      ? 'Sending…'
+                      : isPositive
+                        ? 'Submit Review'
+                        : 'Send Privately to the Owner'}
                   </button>
 
                   <p className="flex items-start gap-2 text-[11px] leading-relaxed text-ivory/40">

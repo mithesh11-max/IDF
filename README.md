@@ -2,7 +2,7 @@
 
 A production-ready, responsive, SEO-optimised static website for a luxury couture & bridal fabric showroom in Bengaluru.
 
-**Stack:** React 18 · TypeScript · Vite 5 · Tailwind CSS 3 · Framer Motion · Lucide icons · self-hosted fonts (Cormorant Garamond + Inter). No backend required.
+**Stack:** React 18 · TypeScript · Vite 5 · React Router 7 · Tailwind CSS 3 · Framer Motion · Lucide icons · self-hosted fonts (Cormorant Garamond + Inter). No backend required — an optional Supabase layer can be switched on for real accounts and live-syncing admin edits; see `HANDOVER.md` section 6.
 
 ---
 
@@ -119,18 +119,18 @@ The app is a client-side-routed SPA, so every host needs a rewrite of unknown pa
 
 ```
 ├── index.html                 # Meta tags, Open Graph, JSON-LD schema
-├── public/                    # Static assets, redirects, robots, sitemap, images
+├── public/                    # Static assets, redirects, robots, sitemap, images, catalog.json
 ├── scripts/spa-fallback.mjs   # Copies index.html → 404.html post-build
+├── supabase/                  # Optional: DB schema + the admin-login edge function
 └── src/
     ├── lib/constants.ts       # ★ All business info (edit me first)
-    ├── lib/seo.ts             # Per-page title/description hook
-    ├── data/                  # Products, collections, testimonials, FAQs, gallery
-    ├── components/
-    │   ├── layout/            # Navbar, footer, announcement bar, preloader…
-    │   ├── ui/                # Buttons, reveals, accordion, lightbox, counters…
-    │   ├── home/              # 12 homepage sections
-    │   └── product/           # Product card
-    └── pages/                 # Home, Collections, Product, Gallery, B2B, About, Contact, 404
+    ├── lib/supabase.ts        # Supabase client — inert until VITE_SUPABASE_* is set
+    ├── lib/adminApi.ts        # Admin login + publish operations against Supabase
+    ├── data/                  # Fallback catalog + reviews bundled into the build
+    ├── context/                # Catalog (live data), Cart, Auth
+    ├── components/             # Navbar, footer, sections, product card, checkout…
+    ├── admin/AdminPanel.tsx   # The /#/admin editor (PIN or Supabase login)
+    └── pages/                 # HomePage, ProductPage
 ```
 
 ## Accessibility & performance notes

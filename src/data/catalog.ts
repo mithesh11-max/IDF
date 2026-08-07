@@ -37,6 +37,10 @@ export interface Item {
   tags: Tag[];
   image: string;
   blurb: string;
+  /** Extra photos for the product page gallery. Falls back to [image] when empty. */
+  gallery?: string[];
+  /** Longer write-up for the product page. Falls back to `blurb` when empty. */
+  details?: string;
 }
 
 export const TAG_LABELS: Record<Tag, string> = {

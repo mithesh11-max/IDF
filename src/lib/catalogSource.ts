@@ -91,6 +91,13 @@ export function normaliseItem(raw: Record<string, unknown>): Item | null {
 
   const mrp = asNumber(raw.mrp, 0);
 
+  const galleryRaw = raw.gallery;
+  const gallery = Array.isArray(galleryRaw)
+    ? galleryRaw.map(String).filter(Boolean)
+    : typeof galleryRaw === 'string' && galleryRaw.trim()
+      ? galleryRaw.split(/[|,]/).map((s) => s.trim()).filter(Boolean)
+      : [];
+
   return {
     id,
     name,
@@ -106,6 +113,8 @@ export function normaliseItem(raw: Record<string, unknown>): Item | null {
     tags: asTags(raw.tags),
     image: String(raw.image ?? '/images/fabrics/f01.jpg').trim(),
     blurb: String(raw.blurb ?? '').trim(),
+    ...(gallery.length ? { gallery } : {}),
+    ...(String(raw.details ?? '').trim() ? { details: String(raw.details).trim() } : {}),
   };
 }
 

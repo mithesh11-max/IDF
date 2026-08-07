@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Minus, Plus, ShoppingBag } from 'lucide-react';
 import type { Item } from '../data/catalog';
 import { useCart } from '../context/CartContext';
@@ -16,7 +17,7 @@ export default function ProductCard({ item }: { item: Item }) {
         soldOut ? 'opacity-75' : ''
       }`}
     >
-      <div className="relative overflow-hidden">
+      <Link to={`/product/${item.id}`} className="relative block overflow-hidden">
         <img
           src={item.image}
           alt={item.name}
@@ -32,11 +33,15 @@ export default function ProductCard({ item }: { item: Item }) {
             Save {inr(item.mrp - item.pricePerMetre)}
           </div>
         )}
-      </div>
+      </Link>
 
       <div className="flex flex-1 flex-col p-4 sm:p-5">
         <p className="text-[10px] uppercase tracking-[0.24em] text-gold/70">{item.category}</p>
-        <h3 className="mt-2 font-serif text-lg leading-snug text-ivory sm:text-xl">{item.name}</h3>
+        <Link to={`/product/${item.id}`}>
+          <h3 className="mt-2 font-serif text-lg leading-snug text-ivory transition-colors hover:text-gold sm:text-xl">
+            {item.name}
+          </h3>
+        </Link>
         <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-ivory/55">{item.blurb}</p>
         <p className="mt-3 text-[11px] uppercase tracking-[0.16em] text-ivory/40">
           {item.composition} · {item.width}

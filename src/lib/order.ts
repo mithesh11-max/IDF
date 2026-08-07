@@ -1,5 +1,5 @@
 import type { Item } from '../data/catalog';
-import { BANK, BUSINESS, UPI, inr } from './constants';
+import { BUSINESS, UPI, inr } from './constants';
 
 export interface Customer {
   name: string;
@@ -14,10 +14,12 @@ export interface Customer {
 /**
  * How the customer chose to pay.
  *  upi   — scanned the QR / opened a UPI app
- *  bank  — NEFT / IMPS / RTGS from their netbanking or banking app
  *  later — reserving now, settling at the showroom
+ *
+ * Card, net banking and wallets arrive together with the Razorpay
+ * integration — see UPI section of HANDOVER.md.
  */
-export type PayMethod = 'upi' | 'bank' | 'later';
+export type PayMethod = 'upi' | 'later';
 
 export interface OrderPayload {
   orderId: string;
@@ -30,7 +32,7 @@ export interface OrderPayload {
   isWholesale: boolean;
   method: PayMethod;
   paid: boolean;
-  /** UPI transaction ID or bank UTR — lets the shop match the credit. */
+  /** UPI transaction ID, if the customer entered one — helps the shop reconcile. */
   reference: string;
 }
 
@@ -58,14 +60,7 @@ export function ownerMessage(o: OrderPayload) {
       ? 'Pickup at showroom'
       : `${o.customer.address}, ${o.customer.city} – ${o.customer.pincode}`;
 
-  let payment: string;
-  if (!o.paid) {
-    payment = 'To be settled at the showroom';
-  } else if (o.method === 'bank') {
-    payment = `PAID by bank transfer to ${BANK.accountNumber} (${BANK.ifsc})`;
-  } else {
-    payment = `PAID by UPI to ${UPI.vpa}`;
-  }
+  const payment = o.paid ? `PAID by UPI to ${UPI.vpa}` : 'To be settled at the showroom';
 
   return [
     `*NEW ORDER PLACED* — ${o.orderId}`,
@@ -85,7 +80,7 @@ export function ownerMessage(o: OrderPayload) {
     `*TOTAL: ${inr(o.total)}*`,
     ``,
     `*Payment:* ${payment}`,
-    o.paid && o.reference ? `*Reference / UTR:* ${o.reference}` : '',
+    o.paid && o.reference ? `*Transaction ID:* ${o.reference}` : '',
     o.customer.notes ? `\n*Notes:* ${o.customer.notes}` : '',
     ``,
     `— sent from ${BUSINESS.name} website`,

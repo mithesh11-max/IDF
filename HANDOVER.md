@@ -4,20 +4,20 @@
 
 | What | Where | Why it matters |
 |---|---|---|
-| **UPI ID** | `src/lib/constants.ts` → `UPI.vpa` | Until it's real, UPI payments go nowhere |
-| **Bank account details** | `src/lib/constants.ts` → `BANK` | Until they're real, transfers go nowhere |
-| **Editor PIN** | `src/lib/constants.ts` → `ADMIN_PIN` | Change from the default `3216` |
+| **UPI ID** | `src/lib/constants.ts` → `UPI.vpa` | Until it's real, payments go nowhere |
+| **Editor PIN** | `src/lib/constants.ts` → `ADMIN_PIN` | Change from the default `3216` — only matters if you skip the Supabase setup in section 6 |
 | WhatsApp / phone number | `src/lib/constants.ts` → `BUSINESS` | Where orders arrive |
 | Free-shipping threshold, wholesale % | `src/lib/constants.ts` → `ORDER` | |
 | Real photos | `public/images/…` | Every image is a placeholder |
+| Logo | `public/images/logo/` | The gold mark is your real logo, already wired in. Swap the files here if it ever changes. |
 
 ---
 
-## 2. Changing prices, stock and offers — **no rebuild needed**
+## 2. Changing prices, stock and offers
 
-This is the part the shop uses every week. Pick ONE of the two routes below.
+**If you've set up accounts and live sync (section 6):** open `yoursite.com/#/admin`, sign in, edit, tap **Publish Live**. Done — every visitor sees it within about a second, no upload, no rebuild. Skip straight to section 3.
 
----
+**If you haven't:** two routes, pick one.
 
 ### Route A — Google Sheet (best if you edit often)
 
@@ -38,23 +38,15 @@ Once set up, changing a price is: open Google Sheets on your phone, type the new
 - `mrp`: leave blank for no strike-through price
 - Google caches published sheets for a few minutes, so changes are not instant
 
-**Trade-off:** the offer banner and reviews are not in the sheet — those stay in the editor (Route B). And anyone with the published URL can read the sheet, so don't put private notes in it.
-
----
+**Trade-off:** the offer banner, reviews and product-page galleries aren't in the sheet — those stay in the editor. And anyone with the published URL can read the sheet, so don't put private notes in it.
 
 ### Route B — the built-in editor at `/#/admin`
 
-Open `yoursite.com/#/admin` on a phone or laptop and enter the PIN.
+Open `yoursite.com/#/admin` and enter the PIN.
 
-You can change:
-- **Price** and a strike-through "was" price (shows a *Save ₹X* badge automatically)
-- **Availability** — In stock / Few left / Sold out. Sold-out fabrics grey out and can't be added to a cart.
-- **Offer pills** — tick Best Selling, New Arrivals, Festival Offers, Seasonal, Wholesale
-- **Offer banner** — the strip across the top of the site. Switch it on for a festive week, off when it ends.
-- **Reviews** — which ones appear publicly
-- Add or remove fabrics entirely
+You can change price, MRP, stock, tags, category, min metres, the short and long descriptions, the main photo and the product-page gallery, or add/remove fabrics entirely.
 
-Then publish. **How you publish depends on how the site is hosted:**
+Then publish:
 
 **If Netlify is connected to this GitHub repo** (the recommended setup):
 1. Tap **Copy text** in the editor
@@ -62,66 +54,133 @@ Then publish. **How you publish depends on how the site is hosted:**
 3. Tap the pencil icon → select all → paste → **Commit changes**
 4. Netlify rebuilds automatically in about a minute
 
-This works from a phone browser and gives you a full history — if a price goes in wrong you can see exactly what changed and roll it back.
+**If you deploy by dragging the `dist` folder to Netlify:** you cannot patch a single file into a live drag-drop deploy — put the new `catalog.json` into `dist/` and drag the whole folder again. This is the main reason to connect the repo instead.
 
-**If you deploy by dragging the `dist` folder to Netlify:** you cannot upload a single file to patch a live drag-drop deploy. You have to put the new `catalog.json` into `dist/` and drag the whole folder again. This is the main reason to connect the repo instead.
-
-**Why a download instead of a Save button:** the site has no server, so there is nothing for a Save button to save *to*. Any button claiming to save would be lying to you. The upshot is a useful one — nothing you do in the editor can break the live site until you choose to publish it.
+**Even without any of this**, an open browser tab quietly re-checks `catalog.json` every 45 seconds, so a customer already on the site sees your update within under a minute once it's published — not just on their next visit.
 
 ---
-
-**Where the catalog comes from, in order:** Google Sheet (if set) → `catalog.json` → the copy built into the site. If one fails the next takes over, so the shop is never blank.
 
 ## 3. How an order works
 
 1. Customer adds fabric by the metre → cart saves automatically.
 2. **Step 1** — name, WhatsApp number, address or store pickup, notes. All validated.
-3. **Step 2 — payment.** Two options:
-   - **UPI** — QR code plus an "Open UPI App" button on phones. Amount and order ID pre-filled.
-   - **Bank Transfer** — account name, number, IFSC and amount, each with a copy button. The customer pays by NEFT/IMPS/RTGS from their own netbanking or banking app, then types the **UTR number** back in so you can match the credit in your statement.
-   - Or they place the order and settle at the showroom.
+3. **Step 2 — payment.** UPI only for now: QR code plus an "Open UPI App" button on phones, amount and order ID pre-filled. Or they place the order and settle at the showroom.
 4. **Step 3 — confirm the send.** WhatsApp opens with the full order typed out. The site then asks *"did you press Send?"* and does **not** treat the order as placed until they say yes. If WhatsApp didn't open there's a retry button, a copy-the-order-text fallback, and the phone number.
 5. **Step 4** — order confirmed, cart cleared.
 
 **The safety net:** if someone opens WhatsApp and wanders off without sending, the order is stored as *pending*. Next time they open the site — an hour or a week later — a bar appears at the bottom: *"Order IDLF-XXXX hasn't reached the showroom yet — Send now."* Their cart is untouched until it's sent.
 
-**Why it works this way:** a website hands you over to WhatsApp and then goes blind. It cannot press Send for you and cannot detect whether you did. Most WhatsApp-checkout sites just show "Order placed!" and hope — which is how orders quietly vanish. This one refuses to claim an order was placed until the customer confirms it, and nags until then. That is the strongest guarantee possible without the paid WhatsApp Business API.
-
 **Wholesale is automatic:** 20+ metres → 15% off in the cart, no code needed.
 
----
-
-## 4. Reviews
-
-Customers rate 1–5 and write a note. What happens next depends on the rating:
-
-- **4 or 5 stars** → arrives on your WhatsApp marked *OK TO PUBLISH*. Add it in the editor's Reviews tab, download `reviews.json`, upload it. Now it's on the site.
-- **1 to 3 stars** → arrives marked *PRIVATE FEEDBACK — NOT FOR THE WEBSITE*, with a prompt to call the customer back. It never appears publicly. The customer is told it's going privately to the owner, so nobody is misled into thinking they posted a public review.
-
-**One thing to keep as it is.** The score above the reviews is calculated from exactly the reviews shown, and is labelled "across N published reviews." Don't change it to an average of everything received while displaying only the good ones — that's the pattern India's review standard (BIS IS 19000:2022, which the CCPA pushes for e-commerce) treats as a deceptive practice. Curating which reviews you feature is completely normal and every shop does it; advertising a rating that the displayed reviews don't support is a different thing, and it's the part that gets businesses in trouble. As built, you get the commercial benefit without the exposure.
+**Cards and net banking** arrive together, later, via Razorpay — see section 5.
 
 ---
 
-## 5. Honest limitations
+## 4. Product pages
+
+Every fabric now has its own page at `/product/<id>` — full gallery, composition, width, minimum order, Add to Cart and Buy Now, plus related fabrics from the same category. Product cards throughout the site link there. Nothing to configure; it reads from the same catalog as everywhere else, so anything you publish in the editor shows up here too.
+
+---
+
+## 5. Payments — what's real vs what needs Razorpay
+
+UPI works today: QR code, deep link, no gateway account needed. Cards and net banking need an actual payment gateway — a website cannot open a bank's own login page or a card network's 3-D Secure screen; only a licensed gateway can. When you're ready:
+
+1. Open a Razorpay (or Cashfree) account — needs business KYC, PAN, GST, bank verification.
+2. Bring the API keys back here and the checkout gets a proper "Pay with Card / Net Banking" step alongside UPI, with real payment verification instead of a customer ticking a box.
+
+Until then, payment is confirmed by the customer, not verified by a gateway — completely normal for a showroom at this stage, but worth knowing.
+
+---
+
+## 6. Accounts and live sync (optional — Supabase)
+
+This is the biggest upgrade available and it's optional. Switching it on gets you:
+
+- **Real accounts for reviews** — Google sign-in, or email + password + a 6-digit verification code. Only signed-in customers can leave a review; anonymous ones are no longer possible.
+- **A real admin login** — username + password + a 6-digit code emailed to you, instead of a PIN. The password never lives inside the website's code, unlike a PIN, which technically does (see the note at the end of this section).
+- **True live sync** — publish a price change and it's on the site for every visitor within about a second. No file upload, no waiting for the 45-second refresh.
+
+It costs nothing at this scale (Supabase's free tier) and takes about 20–30 minutes, once, most of it clicking through dashboards rather than anything technical.
+
+### Setup
+
+**1. Create the project.** Go to [supabase.com](https://supabase.com) → New project. Pick any name and a database password (save it somewhere). Wait ~2 minutes for it to provision.
+
+**2. Run the schema.** In the Supabase dashboard: SQL Editor → New query → paste the entire contents of `supabase/schema.sql` from this repo → Run. This creates the products, reviews and settings tables and locks them down so only the right people can write to each.
+
+**3. Fix the two email templates.** By default Supabase emails a clickable link, not a 6-digit code — this site needs the code. Authentication → Email Templates:
+   - **Confirm signup** → make sure the body includes `{{ .Token }}` (this is what a new customer's verification code comes from)
+   - **Magic Link** → same, include `{{ .Token }}` (this is what both returning customers and the admin's login code come from)
+
+**4. Get your API keys.** Project Settings → API. Copy the **Project URL** and the **anon public** key.
+
+**5. Wire them into the site.** Copy `.env.example` to `.env.local` and paste in those two values:
+   ```
+   VITE_SUPABASE_URL=https://xxxxx.supabase.co
+   VITE_SUPABASE_ANON_KEY=eyJ...
+   ```
+   Add the same two as environment variables in Netlify (Site settings → Environment variables) so the live build picks them up too. Rebuild once.
+
+**6. Deploy the admin login function.** This needs the [Supabase CLI](https://supabase.com/docs/guides/cli) installed once on a computer:
+   ```
+   supabase login
+   supabase link --project-ref xxxxx        # the ref is in your project URL
+   supabase functions deploy admin-auth
+   supabase secrets set ADMIN_USERNAME=admin.idf
+   supabase secrets set ADMIN_PASSWORD='IDF.4U'
+   supabase secrets set ADMIN_EMAIL=m.mithesh11122006@gmail.com
+   ```
+   Change the password to whatever you like before setting it — it's stored as an encrypted secret on Supabase's servers, never inside the website's code, so this is the one place it's actually safe to put a real password. `ADMIN_EMAIL` is where every login code gets sent, so make sure it's an inbox you check.
+
+**7. First login.** Go to `yoursite.com/#/admin`, sign in with the username and password from step 6, enter the code emailed to `ADMIN_EMAIL`. That first successful login automatically promotes the account to admin — nothing else to configure.
+
+**8. (Optional) Turn on Google sign-in for customers.** Authentication → Providers → Google → enable it. You'll need a Google Cloud OAuth client (console.cloud.google.com → APIs & Services → Credentials → Create OAuth client ID → Web application), with Supabase's callback URL added as an authorized redirect URI — Supabase shows you the exact URL to paste in once you toggle Google on. Without this step, email + password + code still works fine for reviews; Google is an added convenience, not a requirement.
+
+### What changes once this is live
+
+- `/#/admin` shows the new username/password/code login instead of the PIN.
+- The **Publish Live** button replaces Copy/Download — it writes straight to the database.
+- The Reviews tab becomes a moderation queue of real, signed-in submissions with Publish / Keep Private / Delete buttons, instead of a manually-typed list.
+- On the storefront, "Write a Review" asks a signed-out visitor to sign in first.
+- Everything in sections 1–5 keeps working exactly as described; this section only removes the file-upload step.
+
+### Why the PIN isn't "real" security and this is
+
+The PIN lives inside the website's own JavaScript, which means anyone can open the browser's dev tools and read it — that's true of any secret placed in frontend code, not a flaw specific to this site. It's an acceptable speed bump for a low-stakes editor with no real backend to protect, which is exactly the situation before this section. The admin password above is different because it's checked on Supabase's servers, inside a function the browser never sees the source of — that's what makes it an actual secret rather than an obscured one.
+
+---
+
+## 7. Reviews — how curation works
+
+Customers rate 1–5 and write a note.
+
+- **4 or 5 stars** → saved as *pending*. You publish it from the Reviews tab and it appears on the site immediately.
+- **1 to 3 stars** → saved as *private*. It never appears publicly; the customer is told this upfront, and you get a chance to make it right.
+
+Without Supabase, the same idea works over WhatsApp instead: good reviews arrive marked *OK TO PUBLISH* for you to paste into the editor; unhappy ones arrive marked *PRIVATE FEEDBACK* with a prompt to call the customer back.
+
+**One thing to keep as it is.** The score above the reviews is calculated from exactly the reviews shown, and labelled "across N published reviews." Don't change it to an average of everything received while displaying only the good ones — that's the pattern India's review standard (BIS IS 19000:2022, which the CCPA pushes for e-commerce) treats as a deceptive practice. Curating which reviews you feature is completely normal and every shop does it; advertising a rating the displayed reviews don't support is the part that gets businesses in trouble. As built, you get the commercial benefit without the exposure.
+
+---
+
+## 8. Honest limitations
 
 | Limitation | Why | Fix when budget allows |
 |---|---|---|
-| No card payments | Cards need a gateway merchant account | Razorpay/Cashfree — needs KYC + ~2% fee |
-| Netbanking is a manual transfer, not a redirect | A site can't open a bank's login page for a customer; only a gateway can | Same as above |
+| No card / net banking payments | Need a gateway merchant account | Razorpay/Cashfree — needs KYC + ~2% fee (section 5) |
 | Payment is confirmed by the customer, not verified | No gateway to verify against | Same as above |
-| Publishing needs a file upload | No database on a static site | Supabase free tier (~2 hrs work) |
-| Stock is edited by hand, not deducted per sale | No inventory server | Supabase / Google Sheets sync |
-| The customer presses Send in WhatsApp | Auto-sending needs the WhatsApp Business API | WhatsApp Cloud API + a small backend |
-| The editor PIN isn't real security | It ships inside the site's JavaScript | Only matters once there's a backend to protect. Never reuse this PIN elsewhere. |
+| The customer presses Send in WhatsApp | Auto-sending needs the paid WhatsApp Business API | WhatsApp Cloud API + a small backend |
+| Stock is edited by hand, not deducted per sale | Nothing watches orders happen in real time | A small backend hook when the Razorpay integration lands |
 
-None of this blocks trading. Thousands of Indian fabric businesses run exactly this way — confirm the payment in your own UPI or bank app, then dispatch.
+Set up section 6 and the older limitations (no accounts, file-upload publishing, an insecure PIN) are solved. Without it, none of this blocks trading — thousands of Indian fabric businesses run exactly this way, confirming payment in their own UPI app before dispatching.
 
 ---
 
-## 6. Deploying
+## 9. Deploying
 
 **Quick:** drag `dist/` onto https://app.netlify.com/drop
 
-**Proper:** push to GitHub → connect the repo on Netlify. `netlify.toml` is already configured (`npm run build` → publish `dist`).
+**Proper:** push to GitHub → connect the repo on Netlify. `netlify.toml` is already configured (`npm run build` → publish `dist`). If you're using section 6, add the two `VITE_SUPABASE_*` environment variables in Netlify's site settings first.
 
-**Day-to-day after that:** see section 2. On the Google Sheet route you never touch deployment at all. On the editor route, committing `catalog.json` to GitHub triggers the redeploy for you. Rebuild by hand only when changing code, photos, or `src/lib/constants.ts`.
+**Day-to-day after that:** see section 2. With accounts and live sync, you never redeploy for a catalog change again. Rebuild by hand only when changing code, photos, or the files in `src/lib/constants.ts`.

@@ -37,28 +37,29 @@ export const BUSINESS = {
 export const UPI = {
   vpa: 'indesignfabrics@okhdfcbank',
   payeeName: 'In Design Luxury Fabrics',
+
+  /**
+   * By default the site GENERATES a QR code per order, encoding the exact
+   * amount and order ID — so the customer's UPI app pre-fills both and
+   * nothing has to be typed. This is the more reliable option and needs no
+   * image file.
+   *
+   * If the shop would rather show their own printed/bank-issued QR sticker
+   * instead, drop that image at `public/images/upi-qr.jpg` and set this to
+   * '/images/upi-qr.jpg'. Trade-off: a static image can't encode the amount,
+   * so the customer has to type it in themselves.
+   */
+  staticQrImage: '',
 } as const;
 
 /**
- * Bank transfer details — for customers paying by NET BANKING / NEFT / IMPS / RTGS.
+ * Payment.
  *
- * WHY THIS EXISTS: a website with no payment gateway cannot open a bank's
- * netbanking page for a customer. What it CAN do is show the shop's account
- * details so the customer pays from their own netbanking or banking app, then
- * types the UTR / reference number back into checkout. That reference travels
- * to the shop on WhatsApp so payment can be matched in the bank statement.
- *
- * REPLACE ALL OF THESE with the shop's real current account details.
+ * Right now the site takes UPI only (QR code + deep link — no gateway account
+ * needed). Card and net banking are switched on later by connecting Razorpay:
+ * that needs a Razorpay merchant account (business KYC) and a small checkout
+ * integration, both easy to add without touching anything else here.
  */
-export const BANK = {
-  enabled: true,
-  accountName: 'IN DESIGN LUXURY FABRICS',
-  accountNumber: '00000000000000',
-  ifsc: 'HDFC0000000',
-  bankName: 'HDFC Bank',
-  branch: 'Commercial Street, Bengaluru',
-  accountType: 'Current Account',
-} as const;
 
 /** Order settings. */
 export const ORDER = {
@@ -118,12 +119,12 @@ export const WA_VISIT = waLink(
 );
 
 export const NAV_LINKS = [
-  { href: '#collections', label: 'Collections' },
-  { href: '#shop', label: 'Shop' },
-  { href: '#atelier', label: 'Atelier' },
-  { href: '#gallery', label: 'Gallery' },
-  { href: '#reviews', label: 'Reviews' },
-  { href: '#visit', label: 'Visit' },
+  { href: '/#collections', label: 'Collections' },
+  { href: '/#shop', label: 'Shop' },
+  { href: '/#atelier', label: 'Atelier' },
+  { href: '/#gallery', label: 'Gallery' },
+  { href: '/#reviews', label: 'Reviews' },
+  { href: '/#visit', label: 'Visit' },
 ] as const;
 
 export const inr = (n: number) => `₹${n.toLocaleString('en-IN')}`;
