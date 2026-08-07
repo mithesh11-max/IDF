@@ -15,35 +15,62 @@
 
 ## 2. Changing prices, stock and offers — **no rebuild needed**
 
-This is the part the shop uses every week.
+This is the part the shop uses every week. Pick ONE of the two routes below.
 
-**Go to `yoursite.com/#/admin`** on a phone or laptop and enter the PIN.
+---
+
+### Route A — Google Sheet (best if you edit often)
+
+Once set up, changing a price is: open Google Sheets on your phone, type the new number, done. The site follows within a few minutes. No downloads, no GitHub, no Netlify.
+
+**One-time setup (~15 minutes):**
+
+1. Open Google Sheets → File → Import → upload `catalog-for-google-sheets.csv` from this repo. That gives you all 12 fabrics already filled in with the right column headers.
+2. File → Share → **Publish to web** → select that sheet → format **CSV** → Publish. Copy the URL it gives you.
+3. Paste that URL into `CATALOG_SOURCE.sheetCsvUrl` in `src/lib/constants.ts`.
+4. Rebuild and redeploy once. After this you never rebuild for a price change again.
+
+**Daily use:** edit the sheet. That's the whole workflow.
+
+- `stock` column: `in`, `low`, or `out`
+- `tags` column: separated by `|` — e.g. `best-seller|festival`
+- `pricePerMetre`: plain numbers, but `8,500` and `₹8500` also work
+- `mrp`: leave blank for no strike-through price
+- Google caches published sheets for a few minutes, so changes are not instant
+
+**Trade-off:** the offer banner and reviews are not in the sheet — those stay in the editor (Route B). And anyone with the published URL can read the sheet, so don't put private notes in it.
+
+---
+
+### Route B — the built-in editor at `/#/admin`
+
+Open `yoursite.com/#/admin` on a phone or laptop and enter the PIN.
 
 You can change:
 - **Price** and a strike-through "was" price (shows a *Save ₹X* badge automatically)
 - **Availability** — In stock / Few left / Sold out. Sold-out fabrics grey out and can't be added to a cart.
-- **Offer pills** — tick Best Selling, New Arrivals, Festival Offers, Seasonal, Wholesale and the fabric appears under that filter
-- **Offer banner** — the red strip across the top of the site. Switch it on for a festive week, switch it off when it ends.
+- **Offer pills** — tick Best Selling, New Arrivals, Festival Offers, Seasonal, Wholesale
+- **Offer banner** — the strip across the top of the site. Switch it on for a festive week, off when it ends.
 - **Reviews** — which ones appear publicly
 - Add or remove fabrics entirely
 
-Then tap **Download catalog.json** and upload that one file to your host, replacing the old one. On Netlify: drag it onto your site's Deploys page. The website updates the moment it lands.
+Then publish. **How you publish depends on how the site is hosted:**
+
+**If Netlify is connected to this GitHub repo** (the recommended setup):
+1. Tap **Copy text** in the editor
+2. Go to `github.com/mithesh11-max/IDF/blob/main/public/catalog.json`
+3. Tap the pencil icon → select all → paste → **Commit changes**
+4. Netlify rebuilds automatically in about a minute
+
+This works from a phone browser and gives you a full history — if a price goes in wrong you can see exactly what changed and roll it back.
+
+**If you deploy by dragging the `dist` folder to Netlify:** you cannot upload a single file to patch a live drag-drop deploy. You have to put the new `catalog.json` into `dist/` and drag the whole folder again. This is the main reason to connect the repo instead.
 
 **Why a download instead of a Save button:** the site has no server, so there is nothing for a Save button to save *to*. Any button claiming to save would be lying to you. The upshot is a useful one — nothing you do in the editor can break the live site until you choose to publish it.
 
-### Even easier: run it from a Google Sheet (optional)
-
-If you'd rather edit prices in a spreadsheet on your phone:
-
-1. Make a Google Sheet with a header row: `id, name, category, composition, width, pricePerMetre, mrp, minMetres, stock, tags, image, blurb`
-2. File → Share → **Publish to web** → pick the sheet → **CSV** → Publish
-3. Paste that URL into `CATALOG_SOURCE.sheetCsvUrl` in `src/lib/constants.ts`, rebuild once
-
-After that, editing the sheet updates the site within a few minutes — no downloads, no uploads. `tags` are separated by `|` (e.g. `best-seller|festival`). Prices tolerate `8,500` and `₹8500`.
+---
 
 **Where the catalog comes from, in order:** Google Sheet (if set) → `catalog.json` → the copy built into the site. If one fails the next takes over, so the shop is never blank.
-
----
 
 ## 3. How an order works
 
@@ -97,4 +124,4 @@ None of this blocks trading. Thousands of Indian fabric businesses run exactly t
 
 **Proper:** push to GitHub → connect the repo on Netlify. `netlify.toml` is already configured (`npm run build` → publish `dist`).
 
-**Day-to-day after that:** you do *not* redeploy to change a price. Upload the new `catalog.json` on its own, or edit the Google Sheet. Rebuild only when changing code, photos or the files in `src/lib/constants.ts`.
+**Day-to-day after that:** see section 2. On the Google Sheet route you never touch deployment at all. On the editor route, committing `catalog.json` to GitHub triggers the redeploy for you. Rebuild by hand only when changing code, photos, or `src/lib/constants.ts`.

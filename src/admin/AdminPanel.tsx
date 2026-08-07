@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   Check,
+  Copy,
   Download,
   Plus,
   Search,
@@ -66,6 +67,20 @@ function download(filename: string, data: unknown) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * On a phone, downloading a file and then finding it again to re-upload is
+ * miserable. Copying the text and pasting it straight into GitHub's web editor
+ * is far less friction, so both routes are offered.
+ */
+async function copyJson(data: unknown): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 
 export default function AdminPanel() {
@@ -79,6 +94,7 @@ export default function AdminPanel() {
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [copied, setCopied] = useState<'catalog' | 'reviews' | null>(null);
 
   useEffect(() => {
     if (!unlocked) return;
@@ -108,16 +124,18 @@ export default function AdminPanel() {
   };
 
   const publishCatalog = () => {
-    download('catalog.json', {
-      updatedAt: new Date().toISOString(),
-      offer,
-      items,
-    });
+    download('catalog.json', catalogPayload());
     setDirty(false);
   };
 
-  const publishReviews = () => {
-    download('reviews.json', { updatedAt: new Date().toISOString(), reviews });
+  const reviewsPayload = () => ({ updatedAt: new Date().toISOString(), reviews });
+  const catalogPayload = () => ({ updatedAt: new Date().toISOString(), offer, items });
+
+  const publishReviews = () => download('reviews.json', reviewsPayload());
+
+  const flashCopied = (which: 'catalog' | 'reviews') => {
+    setCopied(which);
+    setTimeout(() => setCopied(null), 2400);
   };
 
   /* ---------------- PIN gate ---------------- */
@@ -629,10 +647,22 @@ export default function AdminPanel() {
               Add a review
             </button>
 
-            <button type="button" onClick={publishReviews} className="btn btn-gold btn-sheen w-full">
-              <Download className="h-4 w-4" />
-              Download reviews.json
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (await copyJson(reviewsPayload())) flashCopied('reviews');
+                }}
+                className="btn btn-ghost-light"
+              >
+                {copied === 'reviews' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {copied === 'reviews' ? 'Copied' : 'Copy'}
+              </button>
+              <button type="button" onClick={publishReviews} className="btn btn-gold btn-sheen">
+                <Download className="h-4 w-4" />
+                Download
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -641,13 +671,28 @@ export default function AdminPanel() {
       {tab !== 'reviews' && (
         <div className="fixed inset-x-0 bottom-0 border-t border-gold/25 bg-chocolate/98 backdrop-blur">
           <div className="mx-auto max-w-3xl px-5 py-3.5">
-            <button type="button" onClick={publishCatalog} className="btn btn-gold btn-sheen w-full">
-              {dirty ? <Download className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-              {dirty ? 'Download catalog.json' : 'Downloaded — now upload it'}
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (await copyJson(catalogPayload())) {
+                    flashCopied('catalog');
+                    setDirty(false);
+                  }
+                }}
+                className="btn btn-ghost-light"
+              >
+                {copied === 'catalog' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {copied === 'catalog' ? 'Copied' : 'Copy text'}
+              </button>
+              <button type="button" onClick={publishCatalog} className="btn btn-gold btn-sheen">
+                {dirty ? <Download className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+                Download
+              </button>
+            </div>
             <p className="mt-2 text-center text-[11px] leading-relaxed text-ivory/40">
-              Upload this file to your host to replace the old catalog.json. The website updates the
-              moment it lands — no rebuild needed.
+              On a phone, <span className="text-ivory/60">Copy text</span> then paste over
+              public/catalog.json on GitHub — easier than handling a downloaded file.
             </p>
           </div>
         </div>
