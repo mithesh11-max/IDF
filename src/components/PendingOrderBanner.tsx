@@ -56,7 +56,7 @@ export default function PendingOrderBanner() {
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-gold" />
             <div>
               <p className="text-[13px] font-semibold leading-snug text-ivory">
-                Order {pending.orderId} hasn't reached the showroom yet
+                Order <span className="font-nums">{pending.orderId}</span> hasn't reached the showroom yet
               </p>
               <p className="mt-0.5 text-[12px] leading-snug text-ivory/55">
                 {inr(pending.total)} · the WhatsApp message still needs to be sent

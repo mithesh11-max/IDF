@@ -201,7 +201,224 @@ exception when duplicate_object then null;
 end $$;
 
 -- ============================================================================
--- Done. Next: Authentication -> Providers -> make sure Email is enabled, and
--- (optional) enable Google. Then deploy the admin-auth Edge Function — see
--- supabase/functions/admin-auth/index.ts and HANDOVER.md.
+-- CUSTOMERS, ORDERS, WISHLIST — accounts that gate purchases and reviews,
+-- and the record-keeping behind them.
 -- ============================================================================
+
+-- ---------------------------------------------------------------------------
+-- CUSTOMERS — one row per account. Populated the first time someone signs in
+-- and refreshed at checkout, so it stays current even if they signed up with
+-- just an email and added a phone number later.
+-- ---------------------------------------------------------------------------
+create table if not exists public.customers (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  name text not null default '',
+  phone text not null default '',
+  email text not null default '',
+  city text not null default '',
+  signup_method text not null default '', -- 'google' | 'email' | 'phone'
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.customers enable row level security;
+
+drop policy if exists "customers can read their own profile" on public.customers;
+create policy "customers can read their own profile"
+  on public.customers for select
+  using (auth.uid() = user_id or auth.uid() in (select user_id from public.admins));
+
+drop policy if exists "customers can write their own profile" on public.customers;
+create policy "customers can write their own profile"
+  on public.customers for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "customers can update their own profile" on public.customers;
+create policy "customers can update their own profile"
+  on public.customers for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------
+-- ORDERS — a real record of every order placed, tied to the account that
+-- placed it. Previously an order only ever existed as WhatsApp text; this is
+-- what makes order history and "number of purchases" possible.
+-- ---------------------------------------------------------------------------
+create table if not exists public.orders (
+  id uuid primary key default gen_random_uuid(),
+  order_code text not null,
+  customer_id uuid not null references auth.users(id) on delete cascade,
+  items jsonb not null,
+  subtotal integer not null default 0,
+  discount integer not null default 0,
+  shipping integer not null default 0,
+  total integer not null default 0,
+  requirement text not null default '',
+  fulfilment text not null default 'delivery',
+  address text not null default '',
+  city text not null default '',
+  pincode text not null default '',
+  payment_method text not null default '',
+  paid boolean not null default false,
+  payment_reference text not null default '',
+  created_at timestamptz not null default now()
+);
+
+alter table public.orders enable row level security;
+
+drop policy if exists "customers can read their own orders" on public.orders;
+create policy "customers can read their own orders"
+  on public.orders for select
+  using (auth.uid() = customer_id or auth.uid() in (select user_id from public.admins));
+
+drop policy if exists "customers can create their own orders" on public.orders;
+create policy "customers can create their own orders"
+  on public.orders for insert
+  with check (auth.uid() = customer_id);
+
+-- ---------------------------------------------------------------------------
+-- WISHLIST
+-- ---------------------------------------------------------------------------
+create table if not exists public.wishlist (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  product_id text not null references public.products(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (user_id, product_id)
+);
+
+alter table public.wishlist enable row level security;
+
+drop policy if exists "customers manage their own wishlist" on public.wishlist;
+create policy "customers manage their own wishlist"
+  on public.wishlist for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------
+-- APP CONFIG — small settings table. Currently just the Google Sheets sync
+-- URL, kept here (not in code) so it can be changed without a redeploy.
+-- ---------------------------------------------------------------------------
+create table if not exists public.app_config (
+  key text primary key,
+  value text not null default ''
+);
+
+insert into public.app_config (key, value) values ('sheet_webhook_url', '')
+  on conflict (key) do nothing;
+
+alter table public.app_config enable row level security;
+-- No policies granted — readable/writable only by triggers (definer) and the
+-- SQL editor. Not exposed to anon or authenticated clients.
+
+-- ---------------------------------------------------------------------------
+-- GOOGLE SHEETS SYNC — pushes a live snapshot of each customer to the sheet
+-- named IDF_CustDetails whenever their profile or an order changes. Uses
+-- pg_net (Supabase's built-in async HTTP extension) to call the Apps Script
+-- web app URL stored in app_config above — see
+-- supabase/google-apps-script/IDF_CustDetails_sync.gs for the script itself
+-- and HANDOVER.md for how to wire the URL in.
+--
+-- If sheet_webhook_url is still blank, these functions do nothing — silently
+-- and cheaply — so leaving this unset never breaks anything else.
+-- ---------------------------------------------------------------------------
+create extension if not exists pg_net;
+
+create or replace function public.sync_customer_to_sheet()
+returns trigger language plpgsql security definer as $$
+declare
+  webhook text;
+  order_count int;
+begin
+  select value into webhook from public.app_config where key = 'sheet_webhook_url';
+  if webhook is null or webhook = '' then
+    return NEW;
+  end if;
+
+  select count(*) into order_count from public.orders where customer_id = NEW.user_id;
+
+  perform net.http_post(
+    url := webhook,
+    body := jsonb_build_object(
+      'name', NEW.name,
+      'phone', NEW.phone,
+      'email', NEW.email,
+      'city', NEW.city,
+      'signupMethod', NEW.signup_method,
+      'totalOrders', order_count,
+      'lastUpdated', to_char(now(), 'YYYY-MM-DD HH24:MI')
+    ),
+    headers := '{"Content-Type": "application/json"}'::jsonb
+  );
+  return NEW;
+end;
+$$;
+
+drop trigger if exists customers_sync_sheet on public.customers;
+create trigger customers_sync_sheet
+  after insert or update on public.customers
+  for each row execute function public.sync_customer_to_sheet();
+
+create or replace function public.sync_order_to_sheet()
+returns trigger language plpgsql security definer as $$
+declare
+  webhook text;
+  cust record;
+  order_count int;
+  items_summary text;
+begin
+  select value into webhook from public.app_config where key = 'sheet_webhook_url';
+  if webhook is null or webhook = '' then
+    return NEW;
+  end if;
+
+  select * into cust from public.customers where user_id = NEW.customer_id;
+  select count(*) into order_count from public.orders where customer_id = NEW.customer_id;
+  select string_agg(x->>'name', ', ') into items_summary
+    from jsonb_array_elements(NEW.items) x;
+
+  perform net.http_post(
+    url := webhook,
+    body := jsonb_build_object(
+      'name', coalesce(cust.name, ''),
+      'phone', coalesce(cust.phone, ''),
+      'email', coalesce(cust.email, ''),
+      'city', coalesce(cust.city, NEW.city, ''),
+      'signupMethod', coalesce(cust.signup_method, ''),
+      'totalOrders', order_count,
+      'lastOrderCode', NEW.order_code,
+      'lastOrderTotal', NEW.total,
+      'lastOrderItems', coalesce(items_summary, ''),
+      'lastRequirement', NEW.requirement,
+      'lastUpdated', to_char(now(), 'YYYY-MM-DD HH24:MI')
+    ),
+    headers := '{"Content-Type": "application/json"}'::jsonb
+  );
+  return NEW;
+end;
+$$;
+
+drop trigger if exists orders_sync_sheet on public.orders;
+create trigger orders_sync_sheet
+  after insert on public.orders
+  for each row execute function public.sync_order_to_sheet();
+
+do $$
+begin
+  execute 'alter publication supabase_realtime add table public.orders';
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  execute 'alter publication supabase_realtime add table public.wishlist';
+exception when duplicate_object then null;
+end $$;
+
+-- ============================================================================
+-- Done. Next: paste supabase/google-apps-script/IDF_CustDetails_sync.gs into
+-- a Google Sheet named IDF_CustDetails (Extensions -> Apps Script), deploy it
+-- as a web app, and run:
+--   update public.app_config set value = 'PASTE_THE_DEPLOYED_URL_HERE'
+--   where key = 'sheet_webhook_url';
+-- ============================================================================
+

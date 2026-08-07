@@ -1,15 +1,30 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Minus, Plus, ShoppingBag } from 'lucide-react';
+import { Heart, Minus, Plus, ShoppingBag } from 'lucide-react';
 import type { Item } from '../data/catalog';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
+import { useWishlist } from '../context/WishlistContext';
 import { inr, waLink } from '../lib/constants';
 import StockBadge from './StockBadge';
 
 export default function ProductCard({ item }: { item: Item }) {
   const { add } = useCart();
+  const { enabled, user, requestSignIn } = useAuth();
+  const { has, toggle } = useWishlist();
   const [metres, setMetres] = useState(item.minMetres);
   const soldOut = item.stock === 'out';
+  const liked = has(item.id);
+
+  const onHeart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!user) {
+      requestSignIn();
+      return;
+    }
+    toggle(item.id);
+  };
 
   return (
     <article
@@ -28,11 +43,24 @@ export default function ProductCard({ item }: { item: Item }) {
         <div className="absolute left-3 top-3">
           <StockBadge stock={item.stock} />
         </div>
-        {item.mrp && !soldOut && (
-          <div className="absolute right-3 top-3 rounded-full bg-maroon px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-ivory">
-            Save {inr(item.mrp - item.pricePerMetre)}
-          </div>
-        )}
+        <div className="absolute right-3 top-3 flex flex-col items-end gap-2">
+          {enabled && (
+            <button
+              type="button"
+              onClick={onHeart}
+              aria-label={liked ? 'Remove from wishlist' : 'Add to wishlist'}
+              aria-pressed={liked}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-night/60 backdrop-blur-sm transition-colors hover:bg-night/80"
+            >
+              <Heart className={`h-4 w-4 ${liked ? 'fill-maroon text-maroon' : 'text-ivory'}`} strokeWidth={1.75} />
+            </button>
+          )}
+          {item.mrp && !soldOut && (
+            <div className="rounded-full bg-maroon px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-ivory">
+              Save {inr(item.mrp - item.pricePerMetre)}
+            </div>
+          )}
+        </div>
       </Link>
 
       <div className="flex flex-1 flex-col p-4 sm:p-5">
@@ -48,7 +76,7 @@ export default function ProductCard({ item }: { item: Item }) {
         </p>
 
         <div className="mt-4 flex items-baseline gap-2">
-          <span className="font-serif text-2xl text-gold">{inr(item.pricePerMetre)}</span>
+          <span className="font-nums text-2xl font-semibold text-gold">{inr(item.pricePerMetre)}</span>
           <span className="text-[12px] text-ivory/45">/ metre</span>
           {item.mrp && (
             <span className="text-[12px] text-ivory/35 line-through">{inr(item.mrp)}</span>

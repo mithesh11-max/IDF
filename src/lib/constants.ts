@@ -121,7 +121,7 @@ export const WA_VISIT = waLink(
 export const NAV_LINKS = [
   { href: '/#collections', label: 'Collections' },
   { href: '/#shop', label: 'Shop' },
-  { href: '/#atelier', label: 'Atelier' },
+  { href: '/about', label: 'About Us' },
   { href: '/#gallery', label: 'Gallery' },
   { href: '/#reviews', label: 'Reviews' },
   { href: '/#visit', label: 'Visit' },

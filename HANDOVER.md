@@ -142,16 +142,48 @@ It costs nothing at this scale (Supabase's free tier) and takes about 20–30 mi
 - `/#/admin` shows the new username/password/code login instead of the PIN.
 - The **Publish Live** button replaces Copy/Download — it writes straight to the database.
 - The Reviews tab becomes a moderation queue of real, signed-in submissions with Publish / Keep Private / Delete buttons, instead of a manually-typed list.
-- On the storefront, "Write a Review" asks a signed-out visitor to sign in first.
-- Everything in sections 1–5 keeps working exactly as described; this section only removes the file-upload step.
+- A **Sign In** button appears at the top right of the site. Customers can use Google, phone + SMS code, or email + password + a verification code.
+- **Purchases and reviews both require a signed-in account.** Checkout stops at "sign in to continue" until they do. This is a deliberate choice worth knowing the trade-off on: requiring an account before checkout is one of the most common causes of cart abandonment in e-commerce, because it adds a step before someone can pay. It's the right call for a first release when the goal is genuine, contactable customers and clean records — just know that's the trade you're making, and it's easy to loosen later (e.g. "guest checkout, account optional") if you ever want to.
+- Every account gets a **My Account** page (`/account`) — their details, their full order history, and their wishlist.
+- A **wishlist heart** appears on every fabric. Tapping it while signed out prompts sign-in first.
+- Every order is now saved to the database (previously an order only ever existed as WhatsApp text). This is what order history and "number of purchases" are built on.
 
-### Why the PIN isn't "real" security and this is
+### Phone sign-in needs one more thing: an SMS provider
 
-The PIN lives inside the website's own JavaScript, which means anyone can open the browser's dev tools and read it — that's true of any secret placed in frontend code, not a flaw specific to this site. It's an acceptable speed bump for a low-stakes editor with no real backend to protect, which is exactly the situation before this section. The admin password above is different because it's checked on Supabase's servers, inside a function the browser never sees the source of — that's what makes it an actual secret rather than an obscured one.
+Google and email sign-in work the moment Supabase is configured — no extra account needed. **Phone + OTP is different: Supabase doesn't send SMS itself.** It needs a connected SMS provider (Twilio is the common choice), which means:
+
+1. A Twilio account (or MessageBird, Vonage) — needs its own signup and billing.
+2. Supabase dashboard → Authentication → Providers → Phone → paste in the Twilio credentials.
+3. Real cost per SMS (a few paise to a few rupees each, depending on provider and destination).
+
+Until that's connected, the phone option in the sign-in screen will show an error if tapped. Google and email sign-in are unaffected and are enough on their own — treat phone as an optional third option to add later, not a blocker.
 
 ---
 
-## 7. Reviews — how curation works
+## 7. The customer database — Google Sheets
+
+Every customer's name, phone, email, city, how they signed up, and their order history summary (total orders, last order value, last order items, last requirement/notes) can sync live to a Google Sheet named **IDF_CustDetails** — one row per customer, kept updated, not a growing duplicate log. Passwords are never part of this: Supabase never gives this site a customer's password to begin with, so there's nothing to accidentally leak.
+
+**Setup (~10 minutes, after section 6 is done):**
+
+1. Create a Google Sheet, name it exactly `IDF_CustDetails`.
+2. Extensions → Apps Script. Delete the sample code, paste in the whole contents of `supabase/google-apps-script/IDF_CustDetails_sync.gs` from this repo.
+3. Change `SHARED_TOKEN` near the top of that script to your own random string.
+4. Deploy → New deployment → type **Web app** → Execute as **Me** → Who has access **Anyone** → Deploy → authorise it → copy the URL it gives you.
+5. In Supabase's SQL Editor, run:
+   ```sql
+   update public.app_config
+   set value = 'PASTE_THE_URL_HERE?token=YOUR_SHARED_TOKEN'
+   where key = 'sheet_webhook_url';
+   ```
+
+That's it. From then on, every sign-up and every order updates the sheet within a second or two — nothing to run manually, nothing to export. Leave `sheet_webhook_url` blank and this simply doesn't happen; everything else keeps working normally.
+
+**Why a spreadsheet and not a fancier dashboard:** it's what you asked for, and honestly it's the right call at this size — a spreadsheet you can sort, filter and pivot with zero learning curve beats a custom admin screen for "which customers haven't ordered in 60 days" type questions.
+
+---
+
+## 8. Reviews — how curation works
 
 Customers rate 1–5 and write a note.
 
@@ -164,7 +196,13 @@ Without Supabase, the same idea works over WhatsApp instead: good reviews arrive
 
 ---
 
-## 8. Honest limitations
+### Why the PIN isn't "real" security, and the new login is
+
+The PIN lives inside the website's own JavaScript, which means anyone can open the browser's dev tools and read it — true of any secret placed in frontend code, not a flaw specific to this site. It's an acceptable speed bump for a low-stakes editor with nothing real behind it, which was the situation before section 6. The admin password is different because it's checked on Supabase's servers, inside a function the browser never sees the source of — that's what makes it an actual secret rather than an obscured one.
+
+---
+
+## 9. Honest limitations
 
 | Limitation | Why | Fix when budget allows |
 |---|---|---|
@@ -177,7 +215,7 @@ Set up section 6 and the older limitations (no accounts, file-upload publishing,
 
 ---
 
-## 9. Deploying
+## 10. Deploying
 
 **Quick:** drag `dist/` onto https://app.netlify.com/drop
 

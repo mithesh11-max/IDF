@@ -1,14 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Menu, ShoppingBag, X } from 'lucide-react';
+import { Heart, ListOrdered, LogOut, Menu, ShoppingBag, User, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { NAV_LINKS, WA_DEFAULT } from '../lib/constants';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 import Wordmark from './Wordmark';
+
+/** First letter of the customer's name/email, for the little account badge. */
+function initial(label: string) {
+  const c = label.trim().charAt(0).toUpperCase();
+  return c || '•';
+}
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement>(null);
+
   const { items, setOpen: setCartOpen } = useCart();
+  const { enabled, user, profile, signOut, requestSignIn } = useAuth();
   const count = items.reduce((s, i) => s + i.metres, 0);
 
   useEffect(() => {
@@ -24,6 +36,16 @@ export default function Navbar() {
       document.body.style.overflow = '';
     };
   }, [open]);
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (accountRef.current && !accountRef.current.contains(e.target as Node)) setAccountOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  const accountLabel = profile?.name || user?.email || user?.phone || 'Account';
 
   return (
     <header
@@ -64,6 +86,77 @@ export default function Navbar() {
             WhatsApp Us
           </a>
 
+          {/* Account — signed out: opens the sign-in modal. Signed in: initial + dropdown. */}
+          {enabled && (
+            <div className="relative" ref={accountRef}>
+              {user ? (
+                <button
+                  type="button"
+                  onClick={() => setAccountOpen((v) => !v)}
+                  aria-label="Your account"
+                  className="flex h-11 w-11 items-center justify-center text-ivory transition-colors hover:text-gold"
+                >
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full border border-gold/50 text-[12px] font-semibold text-gold">
+                    {initial(accountLabel)}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => requestSignIn()}
+                  aria-label="Sign in or sign up"
+                  className="flex h-11 w-11 items-center justify-center text-ivory transition-colors hover:text-gold"
+                >
+                  <User className="h-5 w-5" strokeWidth={1.7} />
+                </button>
+              )}
+
+              <AnimatePresence>
+                {accountOpen && user && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.18 }}
+                    className="absolute right-0 top-full mt-2 w-56 overflow-hidden rounded-[3px] border border-gold/20 bg-chocolate shadow-xl"
+                  >
+                    <div className="border-b border-ivory/10 px-4 py-3">
+                      <p className="truncate text-[13px] font-medium text-ivory">{accountLabel}</p>
+                      {profile?.email && <p className="truncate text-[11px] text-ivory/45">{profile.email}</p>}
+                    </div>
+                    <Link
+                      to="/account"
+                      onClick={() => setAccountOpen(false)}
+                      className="flex items-center gap-2.5 px-4 py-3 text-[13px] text-ivory/80 hover:bg-ivory/5 hover:text-gold"
+                    >
+                      <ListOrdered className="h-4 w-4" />
+                      My Orders
+                    </Link>
+                    <Link
+                      to="/account#wishlist"
+                      onClick={() => setAccountOpen(false)}
+                      className="flex items-center gap-2.5 px-4 py-3 text-[13px] text-ivory/80 hover:bg-ivory/5 hover:text-gold"
+                    >
+                      <Heart className="h-4 w-4" />
+                      Wishlist
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        signOut();
+                        setAccountOpen(false);
+                      }}
+                      className="flex w-full items-center gap-2.5 border-t border-ivory/10 px-4 py-3 text-left text-[13px] text-ivory/60 hover:bg-ivory/5 hover:text-maroon"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Sign Out
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={() => setCartOpen(true)}
@@ -72,7 +165,7 @@ export default function Navbar() {
           >
             <ShoppingBag className="h-5 w-5" strokeWidth={1.7} />
             {count > 0 && (
-              <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold px-1 text-[9px] font-bold text-night">
+              <span className="font-nums absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold px-1 text-[9px] font-bold text-night">
                 {count}
               </span>
             )}
@@ -110,6 +203,46 @@ export default function Navbar() {
               </button>
             </div>
             <nav className="container-lux flex flex-1 flex-col py-4" aria-label="Mobile primary">
+              {enabled && (
+                <div className="border-b border-ivory/10 py-4">
+                  {user ? (
+                    <div className="space-y-3">
+                      <p className="text-[13px] text-ivory/70">Signed in as {accountLabel}</p>
+                      <div className="flex gap-3">
+                        <Link
+                          to="/account"
+                          onClick={() => setOpen(false)}
+                          className="btn btn-ghost-light flex-1 !py-2.5 !text-[11px]"
+                        >
+                          My Account
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            signOut();
+                            setOpen(false);
+                          }}
+                          className="btn btn-ghost-light flex-1 !py-2.5 !text-[11px]"
+                        >
+                          Sign Out
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpen(false);
+                        requestSignIn();
+                      }}
+                      className="btn btn-gold btn-sheen w-full"
+                    >
+                      <User className="h-4 w-4" />
+                      Sign In / Sign Up
+                    </button>
+                  )}
+                </div>
+              )}
               {NAV_LINKS.map((l, i) => (
                 <motion.a
                   key={l.href}
@@ -142,6 +275,7 @@ export default function Navbar() {
           </motion.div>
         )}
       </AnimatePresence>
+
     </header>
   );
 }

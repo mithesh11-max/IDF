@@ -1,6 +1,6 @@
 {
   "_readme": "LIVE CATALOG. Edit this through the shop editor at yoursite.com/#/admin, then upload this file to replace the old one. The website picks it up immediately — no rebuild required.",
-  "updatedAt": "2026-08-06T19:17:06.051Z",
+  "updatedAt": "2026-08-07T07:56:25.142389Z",
   "offer": {
     "active": false,
     "headline": "",
@@ -37,7 +37,7 @@
       "width": "44 in",
       "pricePerMetre": 4200,
       "minMetres": 2,
-      "stock": "low",
+      "stock": "in",
       "tags": [
         "new-arrival"
       ],
@@ -57,7 +57,7 @@
       "width": "44 in",
       "pricePerMetre": 5600,
       "minMetres": 2,
-      "stock": "out",
+      "stock": "in",
       "tags": [
         "best-seller"
       ],
@@ -142,7 +142,7 @@
       "width": "44 in",
       "pricePerMetre": 2400,
       "minMetres": 3,
-      "stock": "low",
+      "stock": "in",
       "tags": [
         "seasonal",
         "wholesale"
@@ -226,7 +226,7 @@
       "width": "54 in",
       "pricePerMetre": 3400,
       "minMetres": 2,
-      "stock": "out",
+      "stock": "in",
       "tags": [
         "new-arrival"
       ],

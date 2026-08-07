@@ -125,7 +125,7 @@ export default function ProductPage() {
             <h1 className="mt-2 font-serif text-3xl leading-snug text-ink sm:text-4xl">{item.name}</h1>
 
             <div className="mt-4 flex items-baseline gap-2.5">
-              <span className="font-serif text-3xl text-gold-dark">{inr(item.pricePerMetre)}</span>
+              <span className="font-nums text-3xl font-semibold text-gold-dark">{inr(item.pricePerMetre)}</span>
               <span className="text-[13px] text-muted">/ metre</span>
               {item.mrp && <span className="text-[13px] text-muted line-through">{inr(item.mrp)}</span>}
             </div>

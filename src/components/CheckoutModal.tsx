@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import QRCode from 'qrcode';
 import { AlertTriangle, Check, Copy, MessageCircle, ShieldCheck, X } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 import { BUSINESS, UPI, inr } from '../lib/constants';
 import {
   newOrderId,
@@ -13,6 +14,8 @@ import {
   type OrderPayload,
 } from '../lib/order';
 import { clearPending, writePending } from '../lib/pendingOrder';
+import { saveOrder } from '../lib/customerApi';
+import AuthGate from './AuthGate';
 
 interface Props {
   open: boolean;
@@ -31,6 +34,7 @@ const EMPTY: Customer = {
 
 export default function CheckoutModal({ open, onClose }: Props) {
   const { items, subtotal, discount, shipping, total, isWholesale, clear, setOpen } = useCart();
+  const { enabled: accountsEnabled, user, profile, saveProfile } = useAuth();
 
   // 1 details → 2 payment → 3 confirm the WhatsApp send → 4 done
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
@@ -78,6 +82,18 @@ export default function CheckoutModal({ open, onClose }: Props) {
     };
   }, [open]);
 
+  // Once signed in, carry over whatever we already know so the customer
+  // isn't retyping their own name and number every visit.
+  useEffect(() => {
+    if (!profile) return;
+    setCustomer((c) => ({
+      ...c,
+      name: c.name || profile.name,
+      phone: c.phone || profile.phone.replace(/^\+91/, ''),
+      city: c.city || profile.city,
+    }));
+  }, [profile]);
+
   const validate = () => {
     const e: Partial<Record<keyof Customer, string>> = {};
     if (customer.name.trim().length < 2) e.name = 'Please enter your name';
@@ -118,6 +134,30 @@ export default function CheckoutModal({ open, onClose }: Props) {
       createdAt: Date.now(),
       attempts: 1,
     });
+
+    // Real order record + a refreshed profile — this is what powers order
+    // history on /account and the customer database. Fire-and-forget: a
+    // slow network here should never block WhatsApp from opening.
+    if (accountsEnabled && user) {
+      saveProfile({ name: customer.name, phone: customer.phone, city: customer.city });
+      saveOrder({
+        orderCode: orderId,
+        items,
+        subtotal,
+        discount,
+        shipping,
+        total,
+        requirement: customer.notes,
+        fulfilment: customer.fulfilment,
+        address: customer.address,
+        city: customer.city,
+        pincode: customer.pincode,
+        paymentMethod: paid ? 'upi' : 'later',
+        paid,
+        paymentReference: reference.trim(),
+      });
+    }
+
     window.open(link, '_blank', 'noopener');
     setStep(3);
   };
@@ -142,8 +182,18 @@ export default function CheckoutModal({ open, onClose }: Props) {
     setOpen(false);
   };
 
+  const needsAuth = accountsEnabled && !user;
+
   const stepLabel =
-    step === 1 ? 'Your Details' : step === 2 ? 'Payment' : step === 3 ? 'Confirm Send' : 'Order Sent';
+    step === 1
+      ? needsAuth
+        ? 'Sign In to Continue'
+        : 'Your Details'
+      : step === 2
+        ? 'Payment'
+        : step === 3
+          ? 'Confirm Send'
+          : 'Order Sent';
 
   return (
     <AnimatePresence>
@@ -190,8 +240,19 @@ export default function CheckoutModal({ open, onClose }: Props) {
             </header>
 
             <div className="flex-1 overflow-y-auto px-5 py-5">
+              {/* ============ STEP 1a — sign in first, if accounts are on ============ */}
+              {step === 1 && needsAuth && (
+                <div>
+                  <p className="mb-5 text-center text-[13px] leading-relaxed text-ivory/60">
+                    Orders are tied to a verified account — this is what lets you see your order
+                    history and keeps the showroom's customer records genuine.
+                  </p>
+                  <AuthGate compact />
+                </div>
+              )}
+
               {/* ============ STEP 1 — details ============ */}
-              {step === 1 && (
+              {step === 1 && !needsAuth && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-2">
                     {(['delivery', 'pickup'] as const).map((f) => (
@@ -283,7 +344,7 @@ export default function CheckoutModal({ open, onClose }: Props) {
                   <div className="rounded-[3px] border border-gold/25 bg-night/40 p-4">
                     <div className="flex items-center justify-between">
                       <span className="text-[13px] text-ivory/60">Amount payable</span>
-                      <span className="font-serif text-2xl text-gold">{inr(total)}</span>
+                      <span className="font-nums text-2xl font-semibold text-gold">{inr(total)}</span>
                     </div>
                   </div>
 
@@ -431,7 +492,7 @@ export default function CheckoutModal({ open, onClose }: Props) {
                     <Check className="h-7 w-7 text-gold" />
                   </div>
                   <div>
-                    <h3 className="font-serif text-2xl text-ivory">Order {orderId} sent</h3>
+                    <h3 className="font-serif text-2xl text-ivory">Order <span className="font-nums">{orderId}</span> sent</h3>
                     <p className="mx-auto mt-3 max-w-sm text-[14px] leading-relaxed text-ivory/60">
                       The showroom has your requirement on WhatsApp and will confirm availability,
                       cutting and dispatch shortly. Keep your order number handy.

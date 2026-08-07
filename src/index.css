@@ -80,4 +80,18 @@
   .map-tint {
     filter: sepia(0.22) saturate(0.85) contrast(1.02);
   }
+
+  /**
+   * Cormorant Garamond's numerals are a display-serif old-style design —
+   * elegant in a headline, but uneven and hard to scan fast in a price or a
+   * stat (a "3" and "9" drop below the baseline, digits don't share a
+   * height). Anywhere a number is the point — prices, totals, counters,
+   * order codes — this switches to Inter with lining, tabular figures so
+   * every digit is the same height and width and actually easy to read.
+   */
+  .font-nums {
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    font-variant-numeric: lining-nums tabular-nums;
+    font-feature-settings: 'lnum' 1, 'tnum' 1;
+  }
 }

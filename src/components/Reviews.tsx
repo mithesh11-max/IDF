@@ -222,7 +222,7 @@ export default function Reviews() {
 
         <Reveal className="mt-8 flex flex-col items-center gap-3">
           <div className="flex items-center gap-3">
-            <span className="font-serif text-4xl text-gold-dark">{avg}</span>
+            <span className="font-nums text-4xl font-semibold text-gold-dark">{avg}</span>
             <div>
               <Stars n={Math.round(Number(avg) || 0)} size="h-4 w-4" />
               <p className="mt-1 text-[11px] uppercase tracking-[0.16em] text-muted">

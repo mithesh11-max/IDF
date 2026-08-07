@@ -24,7 +24,7 @@ export default function Counter({ value, suffix = '+', label }: CounterProps) {
 
   return (
     <div ref={ref} className="text-center">
-      <p className="font-serif text-3xl text-gold sm:text-4xl md:text-5xl">
+      <p className="font-nums font-semibold text-3xl text-gold sm:text-4xl md:text-5xl">
         {display.toLocaleString('en-IN')}
         {suffix}
       </p>

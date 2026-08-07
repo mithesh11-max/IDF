@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Check, Loader2, Mail } from 'lucide-react';
+import { Check, Loader2, Mail, Smartphone } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-type Mode = 'choose' | 'signup' | 'signup-otp' | 'signin';
+type Mode = 'choose' | 'signup' | 'signup-otp' | 'signin' | 'phone' | 'phone-otp';
 
 /** Google's official "G" mark — the standard, brand-neutral sign-in icon. */
 function GoogleMark() {
@@ -29,10 +29,18 @@ function GoogleMark() {
 }
 
 export default function AuthGate({ compact = false }: { compact?: boolean }) {
-  const { signInWithGoogle, signUpWithEmail, verifySignupCode, signInWithEmail } = useAuth();
+  const {
+    signInWithGoogle,
+    signUpWithEmail,
+    verifySignupCode,
+    signInWithEmail,
+    signInWithPhone,
+    verifyPhoneCode,
+  } = useAuth();
   const [mode, setMode] = useState<Mode>('choose');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -75,6 +83,28 @@ export default function AuthGate({ compact = false }: { compact?: boolean }) {
     if (error) return setError(error);
   };
 
+  const submitPhone = async () => {
+    reset();
+    const digits = phone.replace(/\D/g, '');
+    if (!/^[6-9]\d{9}$/.test(digits)) return setError('Enter a valid 10-digit mobile number');
+    setBusy(true);
+    const { error } = await signInWithPhone(`+91${digits}`);
+    setBusy(false);
+    if (error) return setError(error);
+    setInfo(`We've texted a 6-digit code to +91 ${digits}`);
+    setMode('phone-otp');
+  };
+
+  const submitPhoneOtp = async () => {
+    reset();
+    if (!/^\d{6}$/.test(code)) return setError('Enter the 6-digit code from your SMS');
+    setBusy(true);
+    const digits = phone.replace(/\D/g, '');
+    const { error } = await verifyPhoneCode(`+91${digits}`, code);
+    setBusy(false);
+    if (error) return setError(error);
+  };
+
   const inputClass =
     'w-full rounded-[2px] border border-walnut/20 bg-ivory px-3.5 py-3 text-[14px] text-ink placeholder-muted/60 outline-none focus:border-gold-dark';
 
@@ -94,12 +124,74 @@ export default function AuthGate({ compact = false }: { compact?: boolean }) {
             type="button"
             onClick={() => {
               reset();
+              setMode('phone');
+            }}
+            className="flex w-full items-center justify-center gap-2.5 rounded-[2px] border border-walnut/25 py-3 text-[13px] font-semibold text-ink transition-colors hover:border-gold-dark"
+          >
+            <Smartphone className="h-4 w-4" />
+            Continue with Phone
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              reset();
               setMode('signin');
             }}
             className="flex w-full items-center justify-center gap-2.5 rounded-[2px] border border-walnut/25 py-3 text-[13px] font-semibold text-ink transition-colors hover:border-gold-dark"
           >
             <Mail className="h-4 w-4" />
             Continue with Email
+          </button>
+        </div>
+      )}
+
+      {mode === 'phone' && (
+        <div className="space-y-3">
+          <div className="flex rounded-[2px] border border-walnut/20 bg-ivory focus-within:border-gold-dark">
+            <span className="flex items-center pl-3.5 text-[14px] text-muted">+91</span>
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              placeholder="10-digit mobile number"
+              inputMode="numeric"
+              className="w-full bg-transparent px-2 py-3 text-[14px] text-ink placeholder-muted/60 outline-none"
+            />
+          </div>
+          {error && <p className="text-[12px] text-maroon">{error}</p>}
+          <button type="button" onClick={submitPhone} disabled={busy} className="btn btn-ghost-dark w-full">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send Code'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              reset();
+              setMode('choose');
+            }}
+            className="w-full text-center text-[12px] text-muted hover:text-ink"
+          >
+            ← Back
+          </button>
+        </div>
+      )}
+
+      {mode === 'phone-otp' && (
+        <div className="space-y-3">
+          {info && (
+            <p className="flex items-start gap-2 text-[12px] leading-relaxed text-muted">
+              <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gold-dark" />
+              {info}
+            </p>
+          )}
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="6-digit code"
+            inputMode="numeric"
+            className={`${inputClass} text-center tracking-[0.4em]`}
+          />
+          {error && <p className="text-[12px] text-maroon">{error}</p>}
+          <button type="button" onClick={submitPhoneOtp} disabled={busy} className="btn btn-gold btn-sheen w-full">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Verify & Continue'}
           </button>
         </div>
       )}
